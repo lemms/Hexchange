@@ -78,10 +78,18 @@ def reachable(sim: Simulation, origin: str, jump: int, max_jumps: int, lanes_onl
 
 def find_routes(sim: Simulation, origin: str, *, cargo_tons: float = 100.0, jump: int = 2,
                 max_jumps: int = 3, lanes_only: bool = True, cost_per_ton_hex: float | None = None,
-                include_illegal: bool = False, top: int = 25) -> list[Route]:
+                include_illegal: bool = False, top: int = 25, min_tons: float = 1.0,
+                min_profit: float | None = None) -> list[Route]:
+    """Most profitable single-good runs from ``origin``.
+
+    Runs moving less than ``min_tons`` or earning less than ``min_profit``
+    (default: one ton's worth of the cheapest good's base price) are dropped.
+    """
     c, s = sim.camp, sim.camp.setting
     cost_per_ton_hex = 0.5 * s.lanes.freight_rate if cost_per_ton_hex is None else cost_per_ton_hex
     o = sim.ix.sys[origin]
+    if min_profit is None:
+        min_profit = float(min(g.base_price for g in s.goods))
     prices = sim.prices
     stock = sim._arr("stock")
     out: list[Route] = []
@@ -102,6 +110,8 @@ def find_routes(sim: Simulation, origin: str, *, cargo_tons: float = 100.0, jump
             if q <= 0:
                 continue
             profit = q * margin - 0.5 * q * q * impact
+            if q * g.tons_per_unit < min_tons or profit < min_profit:
+                continue
             out.append(Route(origin, c.systems[dest].id, g.id, [c.systems[i].id for i in path], jumps, off,
                              round(q, 2), round(q * g.tons_per_unit, 2), round(buy, 2), round(sell, 2),
                              round(margin, 2), round(profit, 2), round(risk, 4), legal))

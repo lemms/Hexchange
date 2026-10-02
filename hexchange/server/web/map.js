@@ -114,7 +114,10 @@ export class HexMap {
     this.layers.smug.replaceChildren();
     const sv = Object.values(flows.smuggling || {}).map(Math.abs);
     const smax = Math.max(1e-9, ...sv, max * 0.25);
+    // draw only smuggling that matters next to charted trade, or the map drowns in dashes
+    const cutoff = 0.03 * Math.max(max, ...sv);
     for (const [key, v] of Object.entries(flows.smuggling || {})) {
+      if (Math.abs(v) < cutoff) continue;
       const [ida, idb] = key.split("~");
       const a = this.byId[ida], b = this.byId[idb];
       if (!a || !b) continue;

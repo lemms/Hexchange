@@ -244,3 +244,35 @@ def test_schema_export(tmp_path):
     paths = hx.export_schemas(tmp_path)
     assert {p.name for p in paths} == {"setting.schema.json", "campaign.schema.json"}
     assert json.loads(paths[0].read_text())["title"] == "Setting"
+
+
+def test_roll_table_ranges_including_negative():
+    from hexchange.generate import _table_lookup
+    t = {"-5-2": "X", "3-4": "E", "11-20": "A", "7": "C", "*": "?"}
+    assert _table_lookup(t, -3) == "X" and _table_lookup(t, 2) == "X"
+    assert _table_lookup(t, 4) == "E" and _table_lookup(t, 7) == "C"
+    assert _table_lookup(t, 15) == "A" and _table_lookup(t, 6) == "?"
+
+
+def test_total_embargo_shifts_trade_to_smugglers(setting):
+    camp = hx.generate(setting, width=20, height=20, density=0.5, polities=3, seed=8)
+    sim = hx.Simulation(camp)
+    sim.warmup(10)
+    pol = {x.id: x.polity for x in camp.systems}
+    big = max(camp.polities, key=lambda p: sum(x.polity == p.id for x in camp.systems)).id
+    value = {g.id: g.base_price for g in setting.goods}
+
+    def across():
+        legal = sum(abs(f.amount) * value[f.good] for f in camp.state.flows
+                    if (pol[camp.lanes[sim.ix.lane[f.lane]].a] == big) != (pol[camp.lanes[sim.ix.lane[f.lane]].b] == big))
+        smug = sum(abs(f.amount) * value[f.good] for f in camp.state.smuggling
+                   if (pol[f.lane.split("~")[0]] == big) != (pol[f.lane.split("~")[1]] == big))
+        return legal, smug
+
+    legal0, smug0 = across()
+    sim.add_event(hx.Event(id="total", type="embargo", name="total", start=camp.state.tick,
+                           targets=hx.Targets(polities=[big])))
+    sim.step(6)
+    legal1, smug1 = across()
+    assert legal0 > 0 and legal1 == 0
+    assert smug1 > 1.5 * smug0

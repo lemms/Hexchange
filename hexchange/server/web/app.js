@@ -165,7 +165,7 @@ async function showSystem(id) {
   const pane = $("#pane-system");
   const marketRows = d.market.map(m => {
     const ratio = m.price / m.base_price;
-    const qty = h("input", { type: "number", value: 10, min: 0, step: 1, style: "width:56px" });
+    const qty = h("input", { type: "number", value: 10, min: 0, step: 1 });
     const tradeBtn = (sign, label) => h("button", { onclick: () => guard(async () => {
       const t = await api("/api/trade", { method: "POST", body: { system: id, good: m.good, quantity: sign * Number(qty.value), note: "" } });
       toast(`${sign > 0 ? "Bought" : "Sold"} ${Math.abs(t.quantity)} ${goodName[m.good]} @ ${fmt(t.price)} ${currency}`);
@@ -175,7 +175,7 @@ async function showSystem(id) {
       h("td", {}, goodName[m.good], m.legal ? "" : h("span", { class: "pill warn" }, "illegal")),
       h("td", { class: ratio > 1.05 ? "up" : ratio < 0.95 ? "down" : "" }, fmt(m.price), h("div", { class: "muted" }, `×${ratio.toFixed(2)}`)),
       h("td", {}, fmt(m.buy)), h("td", {}, fmt(m.sell)), h("td", {}, fmt(m.stock, 1)),
-      h("td", {}, sparkline(m.history)),
+      h("td", {}, sparkline(m.history, { width: 60, height: 20 })),
       h("td", {}, qty, " ", tradeBtn(1, "Buy"), " ", tradeBtn(-1, "Sell")));
   });
   const notes = h("textarea", {}, d.notes || "");
@@ -189,7 +189,7 @@ async function showSystem(id) {
       h("button", { onclick: () => togglePlayerVisible(id) }, visible ? "Hide from players" : "Show to players")),
     h("h3", {}, "Market"),
     h("table", {}, h("tr", {}, h("th", {}, "Good"), h("th", {}, `Price ${currency}`), h("th", {}, "Buy"), h("th", {}, "Sell"),
-      h("th", {}, "Stock"), h("th", {}, "Trend"), h("th", {}, "Player trade")), ...marketRows),
+      h("th", {}, "Stock"), h("th", {}, "Trend"), h("th", {}, "Trade (t)")), ...marketRows),
     h("h3", {}, "World"),
     h("div", { class: "grid2" }, ...Object.entries(d.attrs).flatMap(([k, v]) => {
       const a = attrDefs[k]; const desc = a?.descriptions?.[String(v)];

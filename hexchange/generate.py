@@ -44,19 +44,19 @@ def check(cond: Condition, setting: Setting, attrs: dict[str, int | str]) -> boo
     return True
 
 
+_RANGE = re.compile(r"^\s*(-?\d+)\s*-\s*(-?\d+)\s*$")
+
+
 def _table_lookup(table: dict[str, str] | dict[str, float], key: int | str):
+    """Exact key, then numeric ranges like '3-4' or '-5-2', then '*'."""
     k = str(key)
     if k in table:
         return table[k]
     if isinstance(key, int):
         for tk, tv in table.items():
-            if "-" in tk.strip("-"):
-                lo, hi = tk.split("-", 1)
-                try:
-                    if int(lo) <= key <= int(hi):
-                        return tv
-                except ValueError:
-                    pass
+            m = _RANGE.match(tk)
+            if m and int(m.group(1)) <= key <= int(m.group(2)):
+                return tv
     return table.get("*")
 
 

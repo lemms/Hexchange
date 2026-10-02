@@ -1,0 +1,693 @@
+{
+  "$defs": {
+    "AttrMod": {
+      "additionalProperties": false,
+      "description": "Modifier added to an attribute roll, from another attribute.\n\nNumeric: ``factor * (other + offset)``.  Table: ``table[str(other)]`` (key\n``\"*\"`` is the default).",
+      "properties": {
+        "attr": {
+          "title": "Attr",
+          "type": "string"
+        },
+        "factor": {
+          "default": 1.0,
+          "title": "Factor",
+          "type": "number"
+        },
+        "offset": {
+          "default": 0.0,
+          "title": "Offset",
+          "type": "number"
+        },
+        "table": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Table"
+        }
+      },
+      "required": [
+        "attr"
+      ],
+      "title": "AttrMod",
+      "type": "object"
+    },
+    "AttrRule": {
+      "additionalProperties": false,
+      "description": "Override applied after rolling: when all conditions hold, set (or add).",
+      "properties": {
+        "when": {
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "title": "When",
+          "type": "array"
+        },
+        "set": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Set"
+        },
+        "add": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Add"
+        }
+      },
+      "required": [
+        "when"
+      ],
+      "title": "AttrRule",
+      "type": "object"
+    },
+    "AttributeDef": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "default": "int",
+          "enum": [
+            "int",
+            "category"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "min": {
+          "default": 0,
+          "title": "Min",
+          "type": "integer"
+        },
+        "max": {
+          "default": 15,
+          "title": "Max",
+          "type": "integer"
+        },
+        "values": {
+          "description": "category values, in order",
+          "items": {
+            "type": "string"
+          },
+          "title": "Values",
+          "type": "array"
+        },
+        "roll": {
+          "default": "2d6",
+          "description": "dice expression, e.g. '2d6', '1d6', '0'",
+          "title": "Roll",
+          "type": "string"
+        },
+        "add": {
+          "default": 0,
+          "title": "Add",
+          "type": "number"
+        },
+        "mods": {
+          "items": {
+            "$ref": "#/$defs/AttrMod"
+          },
+          "title": "Mods",
+          "type": "array"
+        },
+        "roll_table": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "category attributes: roll result -> value ('*' default, ranges like '3-4')",
+          "title": "Roll Table"
+        },
+        "rules": {
+          "items": {
+            "$ref": "#/$defs/AttrRule"
+          },
+          "title": "Rules",
+          "type": "array"
+        },
+        "encoding": {
+          "default": "int",
+          "enum": [
+            "int",
+            "ehex",
+            "raw"
+          ],
+          "title": "Encoding",
+          "type": "string"
+        },
+        "descriptions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Descriptions",
+          "type": "object"
+        }
+      },
+      "required": [
+        "key",
+        "name"
+      ],
+      "title": "AttributeDef",
+      "type": "object"
+    },
+    "CodeDef": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "all": {
+          "description": "all must hold",
+          "items": {
+            "$ref": "#/$defs/Condition"
+          },
+          "title": "All",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "name"
+      ],
+      "title": "CodeDef",
+      "type": "object"
+    },
+    "Condition": {
+      "additionalProperties": false,
+      "description": "Test on one world attribute: ``min <= value <= max`` and/or ``value in values``.",
+      "properties": {
+        "attr": {
+          "title": "Attr",
+          "type": "string"
+        },
+        "min": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        },
+        "values": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Values"
+        }
+      },
+      "required": [
+        "attr"
+      ],
+      "title": "Condition",
+      "type": "object"
+    },
+    "Demand": {
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "default": 0.0,
+          "description": "units/week at economic weight 1",
+          "title": "Base",
+          "type": "number"
+        },
+        "codes": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Codes",
+          "type": "object"
+        },
+        "min_tech": {
+          "default": 0,
+          "title": "Min Tech",
+          "type": "integer"
+        },
+        "elasticity": {
+          "default": 1.2,
+          "title": "Elasticity",
+          "type": "number"
+        }
+      },
+      "title": "Demand",
+      "type": "object"
+    },
+    "Good": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "category": {
+          "default": "general",
+          "title": "Category",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "base_price": {
+          "title": "Base Price",
+          "type": "number"
+        },
+        "tons_per_unit": {
+          "default": 1.0,
+          "title": "Tons Per Unit",
+          "type": "number"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "recipe: input good -> units per unit",
+          "title": "Inputs",
+          "type": "object"
+        },
+        "production": {
+          "$ref": "#/$defs/Production"
+        },
+        "demand": {
+          "$ref": "#/$defs/Demand"
+        },
+        "illegal_above_law": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "contraband where law attribute exceeds this",
+          "title": "Illegal Above Law"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "base_price"
+      ],
+      "title": "Good",
+      "type": "object"
+    },
+    "LaneParams": {
+      "additionalProperties": false,
+      "properties": {
+        "max_jump": {
+          "default": 4,
+          "title": "Max Jump",
+          "type": "integer"
+        },
+        "extra_edges": {
+          "default": 0.35,
+          "description": "probability scale for non-tree lanes",
+          "title": "Extra Edges",
+          "type": "number"
+        },
+        "max_degree": {
+          "default": 6,
+          "title": "Max Degree",
+          "type": "integer"
+        },
+        "base_capacity": {
+          "default": 4000.0,
+          "description": "tons/week for a lane between average ports",
+          "title": "Base Capacity",
+          "type": "number"
+        },
+        "freight_rate": {
+          "default": 150.0,
+          "description": "currency per ton per hex",
+          "title": "Freight Rate",
+          "type": "number"
+        },
+        "offlane_factor": {
+          "default": 3.0,
+          "description": "freight multiplier for uncharted jumps",
+          "title": "Offlane Factor",
+          "type": "number"
+        },
+        "offlane_capacity": {
+          "default": 0.08,
+          "description": "fraction of base capacity available off-lane",
+          "title": "Offlane Capacity",
+          "type": "number"
+        },
+        "offlane_risk": {
+          "default": 0.25,
+          "title": "Offlane Risk",
+          "type": "number"
+        },
+        "lane_risk": {
+          "default": 0.01,
+          "title": "Lane Risk",
+          "type": "number"
+        }
+      },
+      "title": "LaneParams",
+      "type": "object"
+    },
+    "PortClass": {
+      "additionalProperties": false,
+      "properties": {
+        "capacity": {
+          "default": 1.0,
+          "description": "multiplier on lane capacity at this port",
+          "title": "Capacity",
+          "type": "number"
+        },
+        "lanes": {
+          "default": true,
+          "description": "whether charted lanes may end here",
+          "title": "Lanes",
+          "type": "boolean"
+        },
+        "weight": {
+          "default": 1.0,
+          "description": "importance in lane generation",
+          "title": "Weight",
+          "type": "number"
+        },
+        "fees": {
+          "default": 0.0,
+          "description": "port fee per ton handled, currency units",
+          "title": "Fees",
+          "type": "number"
+        }
+      },
+      "title": "PortClass",
+      "type": "object"
+    },
+    "Production": {
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "default": 0.0,
+          "description": "units/week at economic weight 1, before code multipliers",
+          "title": "Base",
+          "type": "number"
+        },
+        "codes": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "description": "code -> multiplier; missing codes count 1",
+          "title": "Codes",
+          "type": "object"
+        },
+        "requires_any": {
+          "description": "produced only on worlds with one of these codes",
+          "items": {
+            "type": "string"
+          },
+          "title": "Requires Any",
+          "type": "array"
+        },
+        "min_tech": {
+          "default": 0,
+          "title": "Min Tech",
+          "type": "integer"
+        }
+      },
+      "title": "Production",
+      "type": "object"
+    },
+    "RandomEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "weight": {
+          "default": 1.0,
+          "title": "Weight",
+          "type": "number"
+        },
+        "duration": {
+          "default": [
+            2,
+            8
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Duration",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "RandomEvent",
+      "type": "object"
+    },
+    "Roles": {
+      "additionalProperties": false,
+      "description": "Which attributes carry economic meaning.",
+      "properties": {
+        "population": {
+          "title": "Population",
+          "type": "string"
+        },
+        "population_weight_base": {
+          "default": 2.0,
+          "description": "economic weight = base ** population attribute (keeps huge worlds from swamping)",
+          "title": "Population Weight Base",
+          "type": "number"
+        },
+        "tech": {
+          "title": "Tech",
+          "type": "string"
+        },
+        "port": {
+          "title": "Port",
+          "type": "string"
+        },
+        "law": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Law"
+        }
+      },
+      "required": [
+        "population",
+        "tech",
+        "port"
+      ],
+      "title": "Roles",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "currency": {
+      "default": "Cr",
+      "title": "Currency",
+      "type": "string"
+    },
+    "distance_unit": {
+      "default": "hex",
+      "title": "Distance Unit",
+      "type": "string"
+    },
+    "time_unit": {
+      "default": "week",
+      "title": "Time Unit",
+      "type": "string"
+    },
+    "roles": {
+      "$ref": "#/$defs/Roles"
+    },
+    "attributes": {
+      "items": {
+        "$ref": "#/$defs/AttributeDef"
+      },
+      "title": "Attributes",
+      "type": "array"
+    },
+    "profile": {
+      "description": "display template, e.g. '{port}{size}{atm}-{tech}'",
+      "title": "Profile",
+      "type": "string"
+    },
+    "codes": {
+      "items": {
+        "$ref": "#/$defs/CodeDef"
+      },
+      "title": "Codes",
+      "type": "array"
+    },
+    "ports": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PortClass"
+      },
+      "title": "Ports",
+      "type": "object"
+    },
+    "goods": {
+      "items": {
+        "$ref": "#/$defs/Good"
+      },
+      "title": "Goods",
+      "type": "array"
+    },
+    "lanes": {
+      "$ref": "#/$defs/LaneParams"
+    },
+    "name_syllables": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Name Syllables",
+      "type": "array"
+    },
+    "polity_names": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Polity Names",
+      "type": "array"
+    },
+    "random_events": {
+      "items": {
+        "$ref": "#/$defs/RandomEvent"
+      },
+      "title": "Random Events",
+      "type": "array"
+    },
+    "disclaimer": {
+      "default": "",
+      "title": "Disclaimer",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "roles",
+    "attributes",
+    "profile",
+    "ports",
+    "goods"
+  ],
+  "title": "Setting",
+  "type": "object"
+}
