@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hexchange"
+version = "0.1.0"
+description = "Hex-grid galactic economy engine: spatial price equilibrium over hyperlanes, events, smuggling, trade routes."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["numpy>=1.26", "scipy>=1.11", "pydantic>=2.6"]
+
+[project.optional-dependencies]
+server = ["fastapi>=0.110", "uvicorn>=0.29"]
+test = ["pytest", "httpx", "fastapi>=0.110", "uvicorn>=0.29"]
+
+[project.scripts]
+hexchange = "hexchange.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["hexchange*"]
+
+[tool.setuptools.package-data]
+hexchange = ["py.typed", "settings/*.setting.json", "server/web/*", "server/web/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: larger simulations"]

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hexchange — Player view</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1><span>Hex</span>change</h1>
+  <strong id="campName">–</strong>
+  <span class="tick" id="tick"></span>
+  <span class="spacer"></span>
+  <button id="refresh">Refresh</button>
+</header>
+<main>
+  <div id="mapwrap">
+    <svg id="map"></svg>
+    <div id="overlay">
+      <select id="mode"><option value="polity">Polities</option><option value="price">Price of…</option></select>
+      <select id="goodSel"></select>
+    </div>
+    <div id="legend"></div>
+  </div>
+  <aside>
+    <div class="tabs"><button class="on">Market</button></div>
+    <div><section class="pane on" id="pane"><p class="muted">Click a system. Prices are known only where your contacts report them.</p></section></div>
+  </aside>
+</main>
+<script type="module" src="/static/player.js"></script>
+</body>
+</html>

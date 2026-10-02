@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hexchange</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1><span>Hex</span>change</h1>
+  <strong id="campName">–</strong>
+  <span class="tick" id="tick"></span>
+  <span class="spacer"></span>
+  <button id="step1" title="Advance one week">+1 wk</button>
+  <button id="step4">+4 wk</button>
+  <input id="stepN" type="number" min="1" max="520" value="12"><button id="stepGo">Run</button>
+  <button id="saveBtn">Save</button>
+  <button id="loadBtn">Load…</button>
+  <button id="genBtn" class="primary">New sector…</button>
+</header>
+<main>
+  <div id="mapwrap">
+    <svg id="map"></svg>
+    <div id="overlay">
+      <select id="mode">
+        <option value="polity">Polities</option>
+        <option value="price">Price of…</option>
+        <option value="flow">Trade flows</option>
+      </select>
+      <select id="goodSel"></select>
+    </div>
+    <div id="legend"></div>
+  </div>
+  <aside>
+    <div class="tabs">
+      <button data-tab="system" class="on">System</button>
+      <button data-tab="events">Events</button>
+      <button data-tab="routes">Routes</button>
+      <button data-tab="politics">Politics</button>
+      <button data-tab="players">Players</button>
+    </div>
+    <div>
+      <section class="pane on" id="pane-system"><p class="muted">Click a system on the map. Shift-click to select several (for events).</p></section>
+      <section class="pane" id="pane-events"></section>
+      <section class="pane" id="pane-routes"></section>
+      <section class="pane" id="pane-politics"></section>
+      <section class="pane" id="pane-players"></section>
+    </div>
+  </aside>
+</main>
+
+<dialog id="genDlg">
+  <form method="dialog" id="genForm">
+    <h2>New sector</h2>
+    <div class="grid2">
+      <label>Setting</label><select name="setting" id="settingSel"></select>
+      <span></span><span class="muted" id="settingDesc"></span>
+      <label>Name</label><input name="name" value="New Sector">
+      <label>Width × height</label><span><input name="width" type="number" value="32" min="4" max="128"> × <input name="height" type="number" value="40" min="4" max="128"></span>
+      <label>Density</label><input name="density" type="number" value="0.4" step="0.05" min="0.05" max="1">
+      <label>Polities</label><input name="polities" type="number" value="4" min="0" max="24">
+      <label>Seed</label><input name="seed" type="number" value="1">
+      <label>Warm-up weeks</label><input name="warmup" type="number" value="16" min="0" max="200">
+      <label>Save to</label><input name="path" placeholder="~/campaigns/sector.hexchange.json">
+    </div>
+    <div class="row" style="justify-content:flex-end;margin-top:12px">
+      <button value="cancel">Cancel</button><button value="ok" class="primary">Generate</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="loadDlg">
+  <form method="dialog">
+    <h2>Load campaign</h2>
+    <p class="muted">Path to a <span class="mono">.hexchange.json</span> file on this computer.</p>
+    <input name="path" id="loadPath" style="width:100%" placeholder="~/campaigns/sector.hexchange.json">
+    <div class="row" style="justify-content:flex-end;margin-top:12px">
+      <button value="cancel">Cancel</button><button value="ok" class="primary">Load</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast"></div>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>
