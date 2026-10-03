@@ -187,8 +187,11 @@ def assign_polities(camp: Campaign, n: int, rng: random.Random, reach: int = 10)
             camp.relations[relation_key(a.id, b.id)] = round(rng.uniform(-0.3, 0.7), 2)
 
 
-def generate(setting: Setting, *, name: str = "New Sector", width: int = 32, height: int = 40,
-             density: float = 0.4, polities: int = 4, seed: int = 0) -> Campaign:
+def generate(setting: Setting, *, name: str = "New Galaxy", width: int = 32, height: int = 40,
+             density: float = 0.4, polities: int = 4, seed: int = 0,
+             sector_name: str | None = None) -> Campaign:
+    """A new galaxy with one random sector (``sector_name``, default: the galaxy name).
+    Add more with :func:`hexchange.edit.add_sector`."""
     rng = random.Random(seed)
     systems: list[StarSystem] = []
     used: set[str] = set()
@@ -200,7 +203,7 @@ def generate(setting: Setting, *, name: str = "New Sector", width: int = 32, hei
             systems.append(StarSystem(id=hexgrid.label(col, row), name=make_name(setting, rng, used),
                                       col=col, row=row, attrs=attrs, codes=classify(setting, attrs)))
     camp = Campaign(name=name, width=width, height=height, setting=setting, systems=systems,
-                    sectors=[Sector(id="S1", name=name, width=width, height=height)],
+                    sectors=[Sector(id="S1", name=sector_name or name, width=width, height=height)],
                     options=Options(seed=seed))
     camp.lanes = lanegen.build_lanes(camp, rng)
     assign_polities(camp, polities, rng)

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hexchange</title>
-<link rel="stylesheet" href="/static/style.css?v=12">
+<link rel="stylesheet" href="/static/style.css?v=13">
 <script>
   // report script errors and basic diagnostics to the server log
   (function () {
@@ -30,7 +30,7 @@
   <button id="editBtn" class="toggle" title="Add, change and remove systems, lanes and sectors">Edit map</button>
   <button id="saveBtn">Save</button>
   <button id="loadBtn">Load…</button>
-  <button id="genBtn" class="primary">New sector…</button>
+  <button id="genBtn" class="primary" title="Start a new galaxy (add more sectors later in the Map tab)">New galaxy…</button>
 </header>
 <main>
   <div id="mapwrap">
@@ -67,17 +67,19 @@
 
 <dialog id="genDlg">
   <form method="dialog" id="genForm">
-    <h2>New sector</h2>
+    <h2>New galaxy</h2>
+    <p class="muted">Starts a new campaign with one random sector. Add more sectors later in the Map tab.</p>
     <div class="grid2">
       <label>Setting</label><select name="setting" id="settingSel"></select>
       <span></span><span class="muted" id="settingDesc"></span>
-      <label>Name</label><input name="name" value="New Sector">
-      <label>Width × height</label><span><input name="width" type="number" value="32" min="4" max="128"> × <input name="height" type="number" value="40" min="4" max="128"></span>
+      <label>Galaxy name</label><input name="name" value="New Galaxy">
+      <label>First sector</label><input name="sector_name" placeholder="sector name (default: galaxy name)">
+      <label>Sector size</label><span><input name="width" type="number" value="32" min="4" max="128"> × <input name="height" type="number" value="40" min="4" max="128"></span>
       <label>Density</label><input name="density" type="number" value="0.4" step="0.05" min="0.05" max="1">
       <label>Polities</label><input name="polities" type="number" value="4" min="0" max="24">
       <label>Seed</label><input name="seed" type="number" value="1">
       <label>Warm-up weeks</label><input name="warmup" type="number" value="16" min="0" max="200">
-      <label>Save to</label><input name="path" placeholder="~/campaigns/sector.hexchange.json">
+      <label>Save to</label><input name="path" placeholder="~/campaigns/galaxy.hexchange.json">
     </div>
     <div class="row" style="justify-content:flex-end;margin-top:12px">
       <button value="cancel">Cancel</button><button value="ok" class="primary">Generate</button>
@@ -90,7 +92,7 @@
     <h2>Save campaign</h2>
     <p class="muted" id="saveInfo"></p>
     <label>File on this computer</label>
-    <input name="path" id="savePath" style="width:100%" placeholder="~/campaigns/sector.hexchange.json">
+    <input name="path" id="savePath" style="width:100%" placeholder="~/campaigns/galaxy.hexchange.json">
     <p class="muted">Use <span class="mono">.hexchange.json</span> (or <span class="mono">.hexchange.json.gz</span> for a compressed file). Changing the path saves a copy there and autosaves to it from now on.</p>
     <div class="row" style="justify-content:space-between;margin-top:12px">
       <button type="button" id="downloadBtn">Download a copy…</button>
@@ -103,7 +105,7 @@
   <form method="dialog">
     <h2>Load campaign</h2>
     <p class="muted">Path to a <span class="mono">.hexchange.json</span> file on this computer.</p>
-    <input name="path" id="loadPath" style="width:100%" placeholder="~/campaigns/sector.hexchange.json">
+    <input name="path" id="loadPath" style="width:100%" placeholder="~/campaigns/galaxy.hexchange.json">
     <div class="row" style="justify-content:flex-end;margin-top:12px">
       <button value="cancel">Cancel</button><button value="ok" class="primary">Load</button>
     </div>
@@ -111,6 +113,6 @@
 </dialog>
 
 <div class="toast" id="toast"></div>
-<script type="module" src="/static/app.js?v=12"></script>
+<script type="module" src="/static/app.js?v=13"></script>
 </body>
 </html>

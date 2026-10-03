@@ -195,3 +195,12 @@ def test_player_sees_only_known_sectors(client):
     client.post("/api/sectors", json={"name": "Hidden Reach", "adjacent": "S1", "direction": "E", "width": 12, "height": 12})
     r = client.get("/api/player/campaign")
     assert r.json()["sectors"] == [] and "Hidden Reach" not in r.text
+
+
+def test_new_galaxy_names_first_sector(client):
+    d = client.post("/api/generate", json={"setting": "generic", "name": "Andromeda Reach", "sector_name": "Core",
+                                           "width": 12, "height": 12, "warmup": 0}).json()
+    assert d["name"] == "Andromeda Reach" and [s["name"] for s in d["sectors"]] == ["Core"]
+    d = client.post("/api/generate", json={"setting": "generic", "name": "Solo", "sector_name": "",
+                                           "width": 12, "height": 12, "warmup": 0}).json()
+    assert [s["name"] for s in d["sectors"]] == ["Solo"]

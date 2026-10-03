@@ -28,7 +28,8 @@ hexchange settings                                      # list available setting
 hexchange serve campaign.hexchange.json                 # web UI: http://127.0.0.1:8000
 ```
 
-In the UI, click **New sector…** to generate a galaxy. Changes autosave to the campaign file;
+In the UI, click **New galaxy…** to start a campaign with one random sector (add more in the
+Map tab). Changes autosave to the campaign file;
 **Save** lets you save elsewhere or download a copy. The GM view is at `/` and the player
 view at `/player`. **Party and information:** the GM places the party at a system and moves it around. Players
 see that market live. When they leave, they keep the prices as they were on departure, with

@@ -26,7 +26,7 @@ def cmd_settings(a) -> int:
 def cmd_generate(a) -> int:
     setting = hio.load_setting(a.setting, a.settings_dir)
     camp = generate(setting, name=a.name, width=a.width, height=a.height, density=a.density,
-                    polities=a.polities, seed=a.seed)
+                    polities=a.polities, seed=a.seed, sector_name=a.sector_name)
     sim = Simulation(camp)
     if a.warmup:
         sim.warmup(a.warmup)
@@ -106,7 +106,8 @@ def main(argv: list[str] | None = None) -> int:
     _common(sp)
     sp.add_argument("--setting", default="generic")
     sp.add_argument("--out", required=True, type=Path)
-    sp.add_argument("--name", default="New Sector")
+    sp.add_argument("--name", default="New Galaxy")
+    sp.add_argument("--sector-name", help="name of the first sector (default: the galaxy name)")
     sp.add_argument("--width", type=int, default=32)
     sp.add_argument("--height", type=int, default=40)
     sp.add_argument("--density", type=float, default=0.4)

@@ -29,7 +29,8 @@ WEB = Path(__file__).parent / "web"
 
 class GenerateRequest(BaseModel):
     setting: str
-    name: str = "New Sector"
+    name: str = "New Galaxy"
+    sector_name: str | None = None
     width: int = Field(32, ge=4, le=128)
     height: int = Field(40, ge=4, le=128)
     density: float = Field(0.4, gt=0, le=1)
@@ -214,7 +215,8 @@ def create_app(campaign_path: str | None = None, settings_dirs: list[str] | None
         with st.lock:
             setting = hio.load_setting(req.setting, st.settings_dirs)
             camp = generate(setting, name=req.name, width=req.width, height=req.height,
-                            density=req.density, polities=req.polities, seed=req.seed)
+                            density=req.density, polities=req.polities, seed=req.seed,
+                            sector_name=req.sector_name or None)
             sim = Simulation(camp)
             if req.warmup:
                 sim.warmup(req.warmup)

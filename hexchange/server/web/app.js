@@ -280,7 +280,7 @@ function wireHeader() {
   $("#stepGo").onclick = () => step(Number($("#stepN").value) || 1);
   $("#editBtn").onclick = () => setEditMode(!editMode);
   $("#saveBtn").onclick = () => {
-    $("#savePath").value = camp?.path || `~/campaigns/${(camp?.name || "sector").replace(/[^\w.-]+/g, "_")}.hexchange.json`;
+    $("#savePath").value = camp?.path || `~/campaigns/${(camp?.name || "galaxy").replace(/[^\w.-]+/g, "_")}.hexchange.json`;
     $("#saveInfo").textContent = camp?.path
       ? `Changes are saved automatically to ${camp.path}. Save here to write it now, or enter a new path to save a copy elsewhere.`
       : "This campaign has no file yet; choose where to save it. It will autosave there afterwards.";
@@ -307,9 +307,9 @@ function wireHeader() {
     for (const k of ["width", "height", "polities", "seed", "warmup"]) body[k] = Number(body[k]);
     body.density = Number(body.density);
     if (!body.path) delete body.path;
-    $("#busy").textContent = "Generating sector…";
+    $("#busy").textContent = "Generating galaxy…";
     $("#genBtn").disabled = true;
-    guard(async () => { setCampaign(await api("/api/generate", { method: "POST", body })); toast("Sector generated"); })
+    guard(async () => { setCampaign(await api("/api/generate", { method: "POST", body })); toast("Galaxy generated"); })
       .finally(() => { $("#busy").textContent = ""; $("#genBtn").disabled = false; });
   });
 }
