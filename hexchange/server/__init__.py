@@ -136,6 +136,15 @@ def create_app(campaign_path: str | None = None, settings_dirs: list[str] | None
     app = FastAPI(title="Hexchange", version="0.1.0")
     app.state.hx = st
 
+    @app.middleware("http")
+    async def no_stale_ui(request, call_next):
+        # the UI is plain ES modules: make browsers revalidate so an updated
+        # map.js/app.js is never served from cache
+        response = await call_next(request)
+        if not request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     # ------------------------------------------------------------ campaign
     @app.get("/api/settings")
     def settings():
