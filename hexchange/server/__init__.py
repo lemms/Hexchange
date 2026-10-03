@@ -6,6 +6,7 @@ memory; every change is written back to its file when one is set.
 
 from __future__ import annotations
 
+import re
 import threading
 from pathlib import Path
 from typing import Any
@@ -207,7 +208,7 @@ def create_app(campaign_path: str | None = None, settings_dirs: list[str] | None
             sim = st.need()
             return JSONResponse(sim.camp.model_dump(mode="json", exclude_none=True),
                                 headers={"Content-Disposition":
-                                         f'attachment; filename="{sim.camp.name}.hexchange.json"'})
+                                         f'attachment; filename="{re.sub(r"[^\w.-]+", "_", sim.camp.name)}.hexchange.json"'})
 
     @app.post("/api/campaign/upload")
     def upload(data: dict = Body(...)):
@@ -230,6 +231,25 @@ def create_app(campaign_path: str | None = None, settings_dirs: list[str] | None
                 sim.camp.name = name
             st.save()
             return sim.camp.options.model_dump()
+
+    @app.put("/api/polities/{pid}/legality")
+    def set_legality(pid: str, key: str = Body(...), value: Any = Body(None)):
+        """Set (or with value null, remove) one law: key is a good id or 'tag:<tag>';
+        value is 'legal', 'illegal' or an int N (illegal where law > N)."""
+        with st.lock:
+            sim = st.need()
+            pol = next((p for p in sim.camp.polities if p.id == pid), None)
+            if pol is None:
+                raise HTTPException(404, pid)
+            if value is None:
+                pol.legality.pop(key, None)
+            else:
+                if not (value in ("legal", "illegal") or isinstance(value, int)):
+                    raise HTTPException(422, "value must be 'legal', 'illegal' or an integer law level")
+                pol.legality[key] = value
+            sim.refresh_legality()
+            st.save()
+            return pol.legality
 
     @app.put("/api/relations")
     def relations(a: str = Body(...), b: str = Body(...), value: float = Body(..., ge=-1, le=1)):

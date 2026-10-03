@@ -1,4 +1,4 @@
-import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=4";
+import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=5";
 
 const $ = sel => document.querySelector(sel);
 const h = (tag, attrs = {}, ...kids) => {
@@ -21,6 +21,7 @@ const DEFAULT_PARAMS = {
   disaster: { production: 0.5, demand: 1.0 },
   boom: { production: 1.3, demand: 1.3 },
   relations: { value: -0.5 },
+  legality: { status: "illegal" },
   modifier: { field: "production", op: "mul", value: 1.5 },
   player_action: { field: "demand", op: "mul", value: 1.5 },
 };
@@ -92,13 +93,22 @@ function wireHeader() {
   $("#step1").onclick = () => step(1);
   $("#step4").onclick = () => step(4);
   $("#stepGo").onclick = () => step(Number($("#stepN").value) || 1);
-  $("#saveBtn").onclick = () => guard(async () => {
-    let path = camp.path;
-    if (!path) { path = prompt("Save campaign to (path on this computer):", "~/campaigns/sector.hexchange.json"); if (!path) return; }
-    const r = await api("/api/campaign/save", { method: "POST", body: { path } });
-    camp.path = r.path; toast(`Saved to ${r.path}`);
+  $("#saveBtn").onclick = () => {
+    $("#savePath").value = camp?.path || `~/campaigns/${(camp?.name || "sector").replace(/[^\w.-]+/g, "_")}.hexchange.json`;
+    $("#saveInfo").textContent = camp?.path
+      ? `Changes are saved automatically to ${camp.path}. Save here to write it now, or enter a new path to save a copy elsewhere.`
+      : "This campaign has no file yet; choose where to save it. It will autosave there afterwards.";
+    $("#saveDlg").showModal();
+  };
+  $("#downloadBtn").onclick = () => { window.location.href = "/api/campaign/download"; };
+  $("#saveDlg").addEventListener("close", () => {
+    if ($("#saveDlg").returnValue !== "ok") return;
+    guard(async () => {
+      const r = await api("/api/campaign/save", { method: "POST", body: { path: $("#savePath").value.trim() } });
+      camp.path = r.path; toast(`Saved to ${r.path}`);
+    });
   });
-  $("#loadBtn").onclick = () => $("#loadDlg").showModal();
+  $("#loadBtn").onclick = () => { $("#loadPath").value = camp?.path || ""; $("#loadDlg").showModal(); };
   $("#loadDlg").addEventListener("close", () => {
     if ($("#loadDlg").returnValue !== "ok") return;
     guard(async () => setCampaign(await api("/api/campaign/load", { method: "POST", body: { path: $("#loadPath").value } })));
@@ -371,10 +381,34 @@ function renderPolitics() {
       });
       return h("td", {}, inp);
     })))) : h("p", { class: "muted" }, "Fewer than two polities.");
+  const tagsAll = [...new Set(goods.flatMap(g => g.tags))].sort();
+  const lawLabel = v => v === "legal" ? "legal" : v === "illegal" ? "banned" : `banned above law ${v}`;
+  const keyLabel = k => k.startsWith("tag:") ? `all ${k.slice(4)}` : (goodName[k] || k);
+  const lawCard = p => {
+    const keySel = h("select", {}, h("optgroup", { label: "Tags" }, ...tagsAll.map(t => h("option", { value: `tag:${t}` }, `all ${t}`))),
+      h("optgroup", { label: "Goods" }, ...goods.map(g => h("option", { value: g.id }, g.name))));
+    const valSel = h("select", {}, h("option", { value: "legal" }, "legal"), h("option", { value: "illegal" }, "banned"),
+      h("option", { value: "law" }, "banned above law…"));
+    const lawN = h("input", { type: "number", value: 5, min: 0, max: 15, style: "display:none" });
+    valSel.onchange = () => { lawN.style.display = valSel.value === "law" ? "" : "none"; };
+    const setLaw = (key, value) => guard(async () => {
+      p.legality = await api(`/api/polities/${p.id}/legality`, { method: "PUT", body: { key, value } });
+      renderPolitics(); if (selected) showSystem(selected);
+      toast(`${p.name}: ${keyLabel(key)} ${value === null ? "rule removed" : lawLabel(value)}`);
+    });
+    return h("div", { class: "card" },
+      h("span", { style: `color:${p.color}` }, "● "), h("strong", {}, p.name),
+      h("span", { class: "muted" }, ` · ${count[p.id] || 0} systems · capital ${map.byId[p.capital]?.name || "–"}`),
+      h("div", { class: "row" }, ...Object.entries(p.legality || {}).map(([k, v]) =>
+        h("span", { class: "pill" + (v === "legal" ? " on" : " warn"), style: "cursor:pointer", title: "click to remove",
+          onclick: () => setLaw(k, null) }, `${keyLabel(k)}: ${lawLabel(v)} ✕`))),
+      h("div", { class: "row" }, keySel, valSel, lawN, h("button", { onclick: () =>
+        setLaw(keySel.value, valSel.value === "law" ? Number(lawN.value) : valSel.value) }, "Set law")));
+  };
   pane.replaceChildren(
     h("h2", {}, "Polities"),
-    ...pol.map(p => h("div", { class: "card" }, h("span", { style: `color:${p.color}` }, "● "), h("strong", {}, p.name),
-      h("span", { class: "muted" }, ` · ${count[p.id] || 0} systems · capital ${map.byId[p.capital]?.name || "–"}`))),
+    h("p", { class: "muted" }, "Laws decide what is contraband in each polity. Banned goods can only arrive by smuggling. Unaligned systems use each good's default (law level)."),
+    ...pol.map(lawCard),
     h("p", { class: "muted" }, `${count[null] || count[undefined] || 0} unaligned systems.`),
     h("h3", {}, "Relations (−1 hostile … +1 allied)"),
     h("p", { class: "muted" }, "Cross-border lanes pay customs; hostile relations add tariffs. Wars and embargoes override these while active."),

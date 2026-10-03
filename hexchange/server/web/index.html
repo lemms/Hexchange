@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hexchange</title>
-<link rel="stylesheet" href="/static/style.css?v=4">
+<link rel="stylesheet" href="/static/style.css?v=5">
 <script>
   // report script errors and basic diagnostics to the server log
   (function () {
@@ -12,7 +12,7 @@
     window.addEventListener("error", e => send("error", { message: String(e.message), source: e.filename, line: e.lineno, col: e.colno }));
     window.addEventListener("unhandledrejection", e => send("rejection", { message: String(e.reason && (e.reason.stack || e.reason.message) || e.reason) }));
     window.__hxlog = send;
-    send("load", { ua: navigator.userAgent, ui: "v4" });
+    send("load", { ua: navigator.userAgent, ui: "v5" });
   })();
 </script>
 
@@ -82,6 +82,20 @@
   </form>
 </dialog>
 
+<dialog id="saveDlg">
+  <form method="dialog" id="saveForm">
+    <h2>Save campaign</h2>
+    <p class="muted" id="saveInfo"></p>
+    <label>File on this computer</label>
+    <input name="path" id="savePath" style="width:100%" placeholder="~/campaigns/sector.hexchange.json">
+    <p class="muted">Use <span class="mono">.hexchange.json</span> (or <span class="mono">.hexchange.json.gz</span> for a compressed file). Changing the path saves a copy there and autosaves to it from now on.</p>
+    <div class="row" style="justify-content:space-between;margin-top:12px">
+      <button type="button" id="downloadBtn">Download a copy…</button>
+      <span><button value="cancel">Cancel</button> <button value="ok" class="primary">Save</button></span>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="loadDlg">
   <form method="dialog">
     <h2>Load campaign</h2>
@@ -94,6 +108,6 @@
 </dialog>
 
 <div class="toast" id="toast"></div>
-<script type="module" src="/static/app.js?v=4"></script>
+<script type="module" src="/static/app.js?v=5"></script>
 </body>
 </html>

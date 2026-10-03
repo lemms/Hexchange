@@ -173,6 +173,15 @@ def assign_polities(camp: Campaign, n: int, rng: random.Random, reach: int = 10)
                 queue.append((nb, nd, pid))
     for sid, (_, pid) in owner.items():
         by_id[sid].polity = pid
+    for pol in camp.polities:
+        for preset in setting.polity_legality:
+            if not preset.options:
+                continue
+            opt = rng.choices(preset.options, weights=[o.weight for o in preset.options])[0]
+            for gid in preset.goods:
+                pol.legality[gid] = opt.value
+            for tag in preset.tags:
+                pol.legality[f"tag:{tag}"] = opt.value
     for i, a in enumerate(camp.polities):
         for b in camp.polities[i + 1:]:
             camp.relations[relation_key(a.id, b.id)] = round(rng.uniform(-0.3, 0.7), 2)

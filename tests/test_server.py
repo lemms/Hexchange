@@ -50,3 +50,18 @@ def test_full_flow(client, tmp_path):
     assert list(pp["systems"]) == [sid]
     assert client.get("/").status_code == 200 and client.get("/player").status_code == 200
     assert client.get("/static/app.js").status_code == 200
+
+
+def test_polity_law_editing(client):
+    camp = client.post("/api/generate", json={"setting": "generic", "width": 12, "height": 12, "seed": 2,
+                                              "warmup": 2, "polities": 2}).json()
+    pid = camp["polities"][0]["id"]
+    r = client.put(f"/api/polities/{pid}/legality", json={"key": "arms", "value": "legal"})
+    assert r.status_code == 200 and r.json()["arms"] == "legal"
+    assert client.put(f"/api/polities/{pid}/legality", json={"key": "arms", "value": "maybe"}).status_code == 422
+    r = client.put(f"/api/polities/{pid}/legality", json={"key": "arms", "value": None})
+    assert "arms" not in r.json()
+    sid = next(s["id"] for s in camp["systems"] if s["polity"] == pid)
+    client.put(f"/api/polities/{pid}/legality", json={"key": "arms", "value": "illegal"})
+    row = next(m for m in client.get(f"/api/system/{sid}").json()["market"] if m["good"] == "arms")
+    assert row["legal"] is False

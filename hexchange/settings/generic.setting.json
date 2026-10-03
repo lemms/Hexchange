@@ -1,89 +1,693 @@
 {
-  "schema_version": 1,
-  "name": "Generic Frontier",
-  "description": "Setting-neutral sci-fi defaults bundled with hexchange. Copy and edit, or write your own.",
-  "currency": "cr",
-  "distance_unit": "hex",
-  "time_unit": "week",
-  "roles": {"population": "pop", "population_weight_base": 1.9, "tech": "tech", "port": "port", "law": "law"},
-  "attributes": [
-    {"key": "port", "name": "Port class", "kind": "category", "values": ["A", "B", "C", "D", "X"],
-     "roll": "2d6", "roll_table": {"2-4": "X", "5-6": "D", "7-8": "C", "9-10": "B", "11-12": "A"},
-     "descriptions": {"A": "Major shipyard port", "B": "Good port", "C": "Routine port", "D": "Poor port", "X": "No port"}},
-    {"key": "habit", "name": "Habitability", "roll": "2d6", "add": -2, "min": 0, "max": 10},
-    {"key": "res", "name": "Mineral wealth", "roll": "2d6", "add": -2, "min": 0, "max": 10},
-    {"key": "pop", "name": "Population", "roll": "2d6", "add": -2, "min": 0, "max": 10,
-     "mods": [{"attr": "habit", "factor": 0.4, "offset": -5}],
-     "descriptions": {"0": "Outpost", "5": "Millions", "8": "Billions"}},
-    {"key": "law", "name": "Law level", "roll": "2d6", "add": -4, "min": 0, "max": 9,
-     "mods": [{"attr": "pop", "factor": 0.3, "offset": -5}]},
-    {"key": "tech", "name": "Tech level", "roll": "1d6", "add": 2, "min": 0, "max": 15,
-     "mods": [{"attr": "port", "table": {"A": 4, "B": 2, "C": 1, "D": 0, "X": -3}},
-              {"attr": "pop", "factor": 0.25}],
-     "rules": [{"when": [{"attr": "pop", "max": 0}], "set": 0}]}
-  ],
-  "profile": "{port}{habit}{res}{pop}{law}-{tech}",
-  "codes": [
-    {"code": "Ag", "name": "Agricultural", "all": [{"attr": "habit", "min": 6}, {"attr": "pop", "min": 3, "max": 8}]},
-    {"code": "Mi", "name": "Mining", "all": [{"attr": "res", "min": 6}]},
-    {"code": "In", "name": "Industrial", "all": [{"attr": "pop", "min": 7}, {"attr": "tech", "min": 8}]},
-    {"code": "Ht", "name": "High tech", "all": [{"attr": "tech", "min": 12}]},
-    {"code": "Hi", "name": "High population", "all": [{"attr": "pop", "min": 8}]},
-    {"code": "Lo", "name": "Low population", "all": [{"attr": "pop", "min": 1, "max": 3}]},
-    {"code": "Po", "name": "Poor", "all": [{"attr": "habit", "max": 3}, {"attr": "res", "max": 4}]},
-    {"code": "Ri", "name": "Rich", "all": [{"attr": "habit", "min": 6}, {"attr": "pop", "min": 6, "max": 8}]}
-  ],
-  "ports": {
-    "A": {"capacity": 2.0, "lanes": true, "weight": 3.0, "fees": 20},
-    "B": {"capacity": 1.4, "lanes": true, "weight": 2.0, "fees": 15},
-    "C": {"capacity": 1.0, "lanes": true, "weight": 1.2, "fees": 10},
-    "D": {"capacity": 0.5, "lanes": true, "weight": 0.7, "fees": 5},
-    "X": {"capacity": 0.0, "lanes": false, "weight": 0.0, "fees": 0}
+ "schema_version": 1,
+ "name": "Generic Frontier",
+ "description": "Setting-neutral sci-fi defaults bundled with hexchange. Copy and edit, or write your own.",
+ "currency": "cr",
+ "distance_unit": "hex",
+ "time_unit": "week",
+ "roles": {
+  "population": "pop",
+  "population_weight_base": 1.9,
+  "tech": "tech",
+  "port": "port",
+  "law": "law"
+ },
+ "attributes": [
+  {
+   "key": "port",
+   "name": "Port class",
+   "kind": "category",
+   "values": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "X"
+   ],
+   "roll": "2d6",
+   "roll_table": {
+    "2-4": "X",
+    "5-6": "D",
+    "7-8": "C",
+    "9-10": "B",
+    "11-12": "A"
+   },
+   "descriptions": {
+    "A": "Major shipyard port",
+    "B": "Good port",
+    "C": "Routine port",
+    "D": "Poor port",
+    "X": "No port"
+   }
   },
-  "goods": [
-    {"id": "food", "name": "Foodstuffs", "category": "raw", "tags": ["food"], "base_price": 2000,
-     "production": {"base": 6, "codes": {"Ag": 5, "Po": 0.3}}, "demand": {"base": 4, "codes": {"Hi": 1.5}, "elasticity": 0.6}},
-    {"id": "ore", "name": "Common ore", "category": "raw", "base_price": 1000,
-     "production": {"base": 6, "codes": {"Mi": 4}}, "demand": {"base": 0.5}},
-    {"id": "rad", "name": "Radioactives", "category": "raw", "tags": ["strategic"], "base_price": 40000, "tons_per_unit": 0.5,
-     "production": {"base": 0.4, "requires_any": ["Mi"]}, "demand": {"base": 0.1, "codes": {"In": 3}}},
-    {"id": "metal", "name": "Refined metals", "category": "processed", "base_price": 6000, "inputs": {"ore": 2},
-     "production": {"base": 2, "codes": {"In": 3, "Mi": 1.5}, "min_tech": 5}, "demand": {"base": 1}},
-    {"id": "chem", "name": "Chemicals", "category": "processed", "base_price": 8000, "inputs": {"food": 0.5, "ore": 0.5},
-     "production": {"base": 1, "codes": {"In": 3}, "min_tech": 6}, "demand": {"base": 0.8}},
-    {"id": "elec", "name": "Electronics", "category": "manufactured", "base_price": 50000, "tons_per_unit": 0.5,
-     "inputs": {"metal": 0.5, "chem": 0.3}, "production": {"base": 0.4, "codes": {"Ht": 4, "In": 2}, "min_tech": 9},
-     "demand": {"base": 0.4, "codes": {"Ri": 2}, "min_tech": 5}},
-    {"id": "mach", "name": "Machinery", "category": "manufactured", "base_price": 30000,
-     "inputs": {"metal": 2, "elec": 0.2}, "production": {"base": 0.3, "codes": {"In": 4}, "min_tech": 8},
-     "demand": {"base": 0.3, "codes": {"Mi": 2, "Ag": 1.5}}},
-    {"id": "meds", "name": "Medicines", "category": "manufactured", "tags": ["medical"], "base_price": 60000, "tons_per_unit": 0.2,
-     "inputs": {"chem": 0.5}, "production": {"base": 0.2, "codes": {"Ht": 3}, "min_tech": 10},
-     "demand": {"base": 0.15, "codes": {"Po": 2}, "elasticity": 0.5}},
-    {"id": "arms", "name": "Small arms", "category": "manufactured", "tags": ["military"], "base_price": 70000, "tons_per_unit": 0.5,
-     "inputs": {"metal": 0.5, "elec": 0.1}, "production": {"base": 0.1, "codes": {"In": 3}, "min_tech": 7},
-     "demand": {"base": 0.08}, "illegal_above_law": 6},
-    {"id": "drives", "name": "Starship drives", "category": "advanced", "tags": ["military", "ships"], "base_price": 900000, "tons_per_unit": 4,
-     "inputs": {"mach": 2, "elec": 1, "rad": 0.2}, "production": {"base": 0.02, "codes": {"Ht": 5}, "requires_any": ["Ht", "In"], "min_tech": 11},
-     "demand": {"base": 0.01, "codes": {"Hi": 2}}},
-    {"id": "lux", "name": "Luxury goods", "category": "manufactured", "tags": ["luxury"], "base_price": 90000, "tons_per_unit": 0.3,
-     "inputs": {"food": 1, "elec": 0.05}, "production": {"base": 0.05, "codes": {"Ri": 4, "Ag": 2}},
-     "demand": {"base": 0.05, "codes": {"Ri": 4, "Hi": 2}, "elasticity": 1.6}},
-    {"id": "narc", "name": "Narcotics", "category": "raw", "tags": ["contraband"], "base_price": 120000, "tons_per_unit": 0.1,
-     "production": {"base": 0.02, "requires_any": ["Ag"]}, "demand": {"base": 0.02, "codes": {"Hi": 2}},
-     "illegal_above_law": 2}
-  ],
-  "lanes": {"max_jump": 4, "extra_edges": 0.4, "max_degree": 6, "base_capacity": 4000,
-            "freight_rate": 150, "offlane_factor": 3.0, "offlane_capacity": 0.08, "offlane_risk": 0.25, "lane_risk": 0.01},
-  "name_syllables": ["al", "be", "cor", "da", "en", "fa", "gal", "hu", "is", "ka", "lo", "mar", "nu", "or", "pe",
-                     "qua", "ri", "sol", "ta", "ul", "ve", "xi", "yan", "zo"],
-  "polity_names": ["Outer Concord", "Free Worlds League", "Halvorn Compact", "Drift Union", "Merchant Assembly",
-                   "Solar Hegemony"],
-  "random_events": [
-    {"type": "piracy", "weight": 2, "duration": [3, 10], "params": {"risk": 0.1}},
-    {"type": "disaster", "weight": 1, "duration": [2, 8], "params": {"production": 0.4}},
-    {"type": "boom", "weight": 1, "duration": [4, 12]},
-    {"type": "lane_disruption", "weight": 1, "duration": [1, 4], "params": {"factor": 0.2}},
-    {"type": "tariff", "weight": 1, "duration": [8, 26], "params": {"rate": 0.2}}
-  ]
+  {
+   "key": "habit",
+   "name": "Habitability",
+   "roll": "2d6",
+   "add": -2,
+   "min": 0,
+   "max": 10
+  },
+  {
+   "key": "res",
+   "name": "Mineral wealth",
+   "roll": "2d6",
+   "add": -2,
+   "min": 0,
+   "max": 10
+  },
+  {
+   "key": "pop",
+   "name": "Population",
+   "roll": "2d6",
+   "add": -2,
+   "min": 0,
+   "max": 10,
+   "mods": [
+    {
+     "attr": "habit",
+     "factor": 0.4,
+     "offset": -5
+    }
+   ],
+   "descriptions": {
+    "0": "Outpost",
+    "5": "Millions",
+    "8": "Billions"
+   }
+  },
+  {
+   "key": "law",
+   "name": "Law level",
+   "roll": "2d6",
+   "add": -4,
+   "min": 0,
+   "max": 9,
+   "mods": [
+    {
+     "attr": "pop",
+     "factor": 0.3,
+     "offset": -5
+    }
+   ]
+  },
+  {
+   "key": "tech",
+   "name": "Tech level",
+   "roll": "1d6",
+   "add": 2,
+   "min": 0,
+   "max": 15,
+   "mods": [
+    {
+     "attr": "port",
+     "table": {
+      "A": 4,
+      "B": 2,
+      "C": 1,
+      "D": 0,
+      "X": -3
+     }
+    },
+    {
+     "attr": "pop",
+     "factor": 0.25
+    }
+   ],
+   "rules": [
+    {
+     "when": [
+      {
+       "attr": "pop",
+       "max": 0
+      }
+     ],
+     "set": 0
+    }
+   ]
+  }
+ ],
+ "profile": "{port}{habit}{res}{pop}{law}-{tech}",
+ "codes": [
+  {
+   "code": "Ag",
+   "name": "Agricultural",
+   "all": [
+    {
+     "attr": "habit",
+     "min": 6
+    },
+    {
+     "attr": "pop",
+     "min": 3,
+     "max": 8
+    }
+   ]
+  },
+  {
+   "code": "Mi",
+   "name": "Mining",
+   "all": [
+    {
+     "attr": "res",
+     "min": 6
+    }
+   ]
+  },
+  {
+   "code": "In",
+   "name": "Industrial",
+   "all": [
+    {
+     "attr": "pop",
+     "min": 7
+    },
+    {
+     "attr": "tech",
+     "min": 8
+    }
+   ]
+  },
+  {
+   "code": "Ht",
+   "name": "High tech",
+   "all": [
+    {
+     "attr": "tech",
+     "min": 12
+    }
+   ]
+  },
+  {
+   "code": "Hi",
+   "name": "High population",
+   "all": [
+    {
+     "attr": "pop",
+     "min": 8
+    }
+   ]
+  },
+  {
+   "code": "Lo",
+   "name": "Low population",
+   "all": [
+    {
+     "attr": "pop",
+     "min": 1,
+     "max": 3
+    }
+   ]
+  },
+  {
+   "code": "Po",
+   "name": "Poor",
+   "all": [
+    {
+     "attr": "habit",
+     "max": 3
+    },
+    {
+     "attr": "res",
+     "max": 4
+    }
+   ]
+  },
+  {
+   "code": "Ri",
+   "name": "Rich",
+   "all": [
+    {
+     "attr": "habit",
+     "min": 6
+    },
+    {
+     "attr": "pop",
+     "min": 6,
+     "max": 8
+    }
+   ]
+  }
+ ],
+ "ports": {
+  "A": {
+   "capacity": 2.0,
+   "lanes": true,
+   "weight": 3.0,
+   "fees": 20
+  },
+  "B": {
+   "capacity": 1.4,
+   "lanes": true,
+   "weight": 2.0,
+   "fees": 15
+  },
+  "C": {
+   "capacity": 1.0,
+   "lanes": true,
+   "weight": 1.2,
+   "fees": 10
+  },
+  "D": {
+   "capacity": 0.5,
+   "lanes": true,
+   "weight": 0.7,
+   "fees": 5
+  },
+  "X": {
+   "capacity": 0.0,
+   "lanes": false,
+   "weight": 0.0,
+   "fees": 0
+  }
+ },
+ "goods": [
+  {
+   "id": "food",
+   "name": "Foodstuffs",
+   "category": "raw",
+   "tags": [
+    "food"
+   ],
+   "base_price": 2000,
+   "production": {
+    "base": 6,
+    "codes": {
+     "Ag": 5,
+     "Po": 0.3
+    }
+   },
+   "demand": {
+    "base": 4,
+    "codes": {
+     "Hi": 1.5
+    },
+    "elasticity": 0.6
+   }
+  },
+  {
+   "id": "ore",
+   "name": "Common ore",
+   "category": "raw",
+   "base_price": 1000,
+   "production": {
+    "base": 6,
+    "codes": {
+     "Mi": 4
+    }
+   },
+   "demand": {
+    "base": 0.5
+   }
+  },
+  {
+   "id": "rad",
+   "name": "Radioactives",
+   "category": "raw",
+   "tags": [
+    "strategic"
+   ],
+   "base_price": 40000,
+   "tons_per_unit": 0.5,
+   "production": {
+    "base": 0.4,
+    "requires_any": [
+     "Mi"
+    ]
+   },
+   "demand": {
+    "base": 0.1,
+    "codes": {
+     "In": 3
+    }
+   }
+  },
+  {
+   "id": "metal",
+   "name": "Refined metals",
+   "category": "processed",
+   "base_price": 6000,
+   "inputs": {
+    "ore": 2
+   },
+   "production": {
+    "base": 2,
+    "codes": {
+     "In": 3,
+     "Mi": 1.5
+    },
+    "min_tech": 5
+   },
+   "demand": {
+    "base": 1
+   }
+  },
+  {
+   "id": "chem",
+   "name": "Chemicals",
+   "category": "processed",
+   "base_price": 8000,
+   "inputs": {
+    "food": 0.5,
+    "ore": 0.5
+   },
+   "production": {
+    "base": 1,
+    "codes": {
+     "In": 3
+    },
+    "min_tech": 6
+   },
+   "demand": {
+    "base": 0.8
+   }
+  },
+  {
+   "id": "elec",
+   "name": "Electronics",
+   "category": "manufactured",
+   "base_price": 50000,
+   "tons_per_unit": 0.5,
+   "inputs": {
+    "metal": 0.5,
+    "chem": 0.3
+   },
+   "production": {
+    "base": 0.4,
+    "codes": {
+     "Ht": 4,
+     "In": 2
+    },
+    "min_tech": 9
+   },
+   "demand": {
+    "base": 0.4,
+    "codes": {
+     "Ri": 2
+    },
+    "min_tech": 5
+   }
+  },
+  {
+   "id": "mach",
+   "name": "Machinery",
+   "category": "manufactured",
+   "base_price": 30000,
+   "inputs": {
+    "metal": 2,
+    "elec": 0.2
+   },
+   "production": {
+    "base": 0.3,
+    "codes": {
+     "In": 4
+    },
+    "min_tech": 8
+   },
+   "demand": {
+    "base": 0.3,
+    "codes": {
+     "Mi": 2,
+     "Ag": 1.5
+    }
+   }
+  },
+  {
+   "id": "meds",
+   "name": "Medicines",
+   "category": "manufactured",
+   "tags": [
+    "medical"
+   ],
+   "base_price": 60000,
+   "tons_per_unit": 0.2,
+   "inputs": {
+    "chem": 0.5
+   },
+   "production": {
+    "base": 0.2,
+    "codes": {
+     "Ht": 3
+    },
+    "min_tech": 10
+   },
+   "demand": {
+    "base": 0.15,
+    "codes": {
+     "Po": 2
+    },
+    "elasticity": 0.5
+   }
+  },
+  {
+   "id": "arms",
+   "name": "Small arms",
+   "category": "manufactured",
+   "tags": [
+    "military"
+   ],
+   "base_price": 70000,
+   "tons_per_unit": 0.5,
+   "inputs": {
+    "metal": 0.5,
+    "elec": 0.1
+   },
+   "production": {
+    "base": 0.1,
+    "codes": {
+     "In": 3
+    },
+    "min_tech": 7
+   },
+   "demand": {
+    "base": 0.08
+   },
+   "illegal_above_law": 6
+  },
+  {
+   "id": "drives",
+   "name": "Starship drives",
+   "category": "advanced",
+   "tags": [
+    "military",
+    "ships"
+   ],
+   "base_price": 900000,
+   "tons_per_unit": 4,
+   "inputs": {
+    "mach": 2,
+    "elec": 1,
+    "rad": 0.2
+   },
+   "production": {
+    "base": 0.02,
+    "codes": {
+     "Ht": 5
+    },
+    "requires_any": [
+     "Ht",
+     "In"
+    ],
+    "min_tech": 11
+   },
+   "demand": {
+    "base": 0.01,
+    "codes": {
+     "Hi": 2
+    }
+   }
+  },
+  {
+   "id": "lux",
+   "name": "Luxury goods",
+   "category": "manufactured",
+   "tags": [
+    "luxury"
+   ],
+   "base_price": 90000,
+   "tons_per_unit": 0.3,
+   "inputs": {
+    "food": 1,
+    "elec": 0.05
+   },
+   "production": {
+    "base": 0.05,
+    "codes": {
+     "Ri": 4,
+     "Ag": 2
+    }
+   },
+   "demand": {
+    "base": 0.05,
+    "codes": {
+     "Ri": 4,
+     "Hi": 2
+    },
+    "elasticity": 1.6
+   }
+  },
+  {
+   "id": "narc",
+   "name": "Narcotics",
+   "category": "raw",
+   "tags": [
+    "contraband"
+   ],
+   "base_price": 120000,
+   "tons_per_unit": 0.1,
+   "production": {
+    "base": 0.02,
+    "requires_any": [
+     "Ag"
+    ]
+   },
+   "demand": {
+    "base": 0.02,
+    "codes": {
+     "Hi": 2
+    }
+   },
+   "illegal_above_law": 2
+  }
+ ],
+ "lanes": {
+  "max_jump": 4,
+  "extra_edges": 0.4,
+  "max_degree": 6,
+  "base_capacity": 4000,
+  "freight_rate": 150,
+  "offlane_factor": 3.0,
+  "offlane_capacity": 0.08,
+  "offlane_risk": 0.25,
+  "lane_risk": 0.01
+ },
+ "name_syllables": [
+  "al",
+  "be",
+  "cor",
+  "da",
+  "en",
+  "fa",
+  "gal",
+  "hu",
+  "is",
+  "ka",
+  "lo",
+  "mar",
+  "nu",
+  "or",
+  "pe",
+  "qua",
+  "ri",
+  "sol",
+  "ta",
+  "ul",
+  "ve",
+  "xi",
+  "yan",
+  "zo"
+ ],
+ "polity_names": [
+  "Outer Concord",
+  "Free Worlds League",
+  "Halvorn Compact",
+  "Drift Union",
+  "Merchant Assembly",
+  "Solar Hegemony"
+ ],
+ "random_events": [
+  {
+   "type": "piracy",
+   "weight": 2,
+   "duration": [
+    3,
+    10
+   ],
+   "params": {
+    "risk": 0.1
+   }
+  },
+  {
+   "type": "disaster",
+   "weight": 1,
+   "duration": [
+    2,
+    8
+   ],
+   "params": {
+    "production": 0.4
+   }
+  },
+  {
+   "type": "boom",
+   "weight": 1,
+   "duration": [
+    4,
+    12
+   ]
+  },
+  {
+   "type": "lane_disruption",
+   "weight": 1,
+   "duration": [
+    1,
+    4
+   ],
+   "params": {
+    "factor": 0.2
+   }
+  },
+  {
+   "type": "tariff",
+   "weight": 1,
+   "duration": [
+    8,
+    26
+   ],
+   "params": {
+    "rate": 0.2
+   }
+  }
+ ],
+ "polity_legality": [
+  {
+   "tags": [
+    "military"
+   ],
+   "goods": [],
+   "options": [
+    {
+     "value": "legal",
+     "weight": 1
+    },
+    {
+     "value": 6,
+     "weight": 2
+    },
+    {
+     "value": "illegal",
+     "weight": 1
+    }
+   ]
+  },
+  {
+   "tags": [
+    "contraband"
+   ],
+   "options": [
+    {
+     "value": "legal",
+     "weight": 1
+    },
+    {
+     "value": 2,
+     "weight": 2
+    },
+    {
+     "value": "illegal",
+     "weight": 2
+    }
+   ]
+  }
+ ]
 }

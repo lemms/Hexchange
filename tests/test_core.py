@@ -276,3 +276,64 @@ def test_total_embargo_shifts_trade_to_smugglers(setting):
     legal1, smug1 = across()
     assert legal0 > 0 and legal1 == 0
     assert smug1 > 1.5 * smug0
+
+
+# ---------------------------------------------------------------- legality
+def test_polity_laws_override_law_level(small):
+    camp, sim = small.camp, small
+    k = sim.ix.good["arms"]                       # default: illegal above law 6
+    p = camp.polities[0]
+    members = np.array([s.polity == p.id for s in camp.systems])
+    p.legality = {"tag:military": "legal"}
+    sim.refresh_legality()
+    assert not sim.illegal[members, k].any()
+    p.legality = {"tag:military": "illegal"}
+    sim.refresh_legality()
+    assert sim.illegal[members, k].all()
+    # a rule for the specific good beats the tag rule
+    p.legality = {"tag:military": "illegal", "arms": "legal"}
+    sim.refresh_legality()
+    assert not sim.illegal[members, k].any()
+    assert sim.illegal[members, sim.ix.good["drives"]].all()      # drives are also 'military'
+    # numeric rule uses each system's law level
+    p.legality = {"arms": 2}
+    sim.refresh_legality()
+    assert np.array_equal(sim.illegal[members, k], sim.law[members] > 2)
+    # unaligned systems keep the good's default
+    outside = np.array([s.polity is None for s in camp.systems])
+    assert outside.any()
+    assert np.array_equal(sim.illegal[outside, k], sim.law[outside] > 6)
+
+
+def test_legality_event_is_temporary(small):
+    camp, sim = small.camp, small
+    p = camp.polities[0]
+    members = np.array([s.polity == p.id for s in camp.systems])
+    k = sim.ix.good["arms"]
+    before = sim.illegal.copy()
+    sim.add_event(hx.Event(id="ml", type="legality", name="Martial law", start=camp.state.tick, duration=2,
+                           targets=hx.Targets(polities=[p.id], tags=["military"]), params={"status": "illegal"}))
+    assert sim.illegal[members, k].all()
+    sim.step(2)
+    assert np.array_equal(sim.illegal, before)
+
+
+def test_banned_goods_reach_market_only_by_smuggling(small):
+    camp, sim = small.camp, small
+    p = camp.polities[0]
+    p.legality = {"arms": "illegal"}
+    sim.refresh_legality()
+    sim.step(3)
+    k = sim.ix.good["arms"]
+    for f in camp.state.flows:
+        if f.good != "arms":
+            continue
+        ln = camp.lanes[sim.ix.lane[f.lane]]
+        dest = ln.b if f.amount > 0 else ln.a
+        assert not sim.illegal[sim.ix.sys[dest], k]
+
+
+def test_generated_polities_get_laws(setting):
+    camp = hx.generate(setting, width=16, height=16, polities=4, seed=9)
+    assert all(p.legality for p in camp.polities)
+    assert {"tag:military", "tag:contraband"} <= set(camp.polities[0].legality)

@@ -138,6 +138,23 @@ class LaneParams(_Model):
     lane_risk: float = 0.01
 
 
+Legality = Literal["legal", "illegal"] | int
+"""'legal' / 'illegal' everywhere in the polity, or an int N: illegal where law level > N."""
+
+
+class LegalityOption(_Model):
+    value: Legality
+    weight: float = 1.0
+
+
+class LegalityPreset(_Model):
+    """At generation each polity picks one option for these goods/tags."""
+
+    goods: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    options: list[LegalityOption]
+
+
 class RandomEvent(_Model):
     type: str
     weight: float = 1.0
@@ -162,6 +179,8 @@ class Setting(_Model):
     name_syllables: list[str] = Field(default_factory=lambda: ["ka", "ra", "to", "mi", "su", "ne", "lo", "va"])
     polity_names: list[str] = Field(default_factory=list)
     random_events: list[RandomEvent] = Field(default_factory=list)
+    polity_legality: list[LegalityPreset] = Field(
+        default_factory=list, description="how polities' laws on goods are rolled at generation")
     disclaimer: str = ""
 
     @model_validator(mode="after")
@@ -215,10 +234,14 @@ class Polity(_Model):
     name: str
     color: str
     capital: str | None = None
+    legality: dict[str, Legality] = Field(
+        default_factory=dict,
+        description="good id or 'tag:<tag>' -> 'legal' | 'illegal' | N (illegal where law > N). "
+                    "Good rules beat tag rules, which beat the good's own illegal_above_law.")
 
 
 EventType = Literal["war", "embargo", "tariff", "lane_disruption", "piracy",
-                    "disaster", "boom", "relations", "modifier", "player_action"]
+                    "disaster", "boom", "relations", "legality", "modifier", "player_action"]
 
 
 class Targets(_Model):

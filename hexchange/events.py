@@ -30,6 +30,9 @@ EVENT_HELP = {
     "disaster": "targets.systems/polities: production x params.production (0.5), demand x params.demand (1.0).",
     "boom": "targets.systems/polities: production x params.production (1.3), demand x params.demand (1.3).",
     "relations": "Set relation of targets.polities[0] and [1] to params.value (-1..1).",
+    "legality": "In targets.systems/polities, targets.goods/tags become params.status: 'legal', 'illegal', "
+                "or a number N (illegal where law level > N). E.g. martial law, legalisation. "
+                "Banned goods can then only arrive by smuggling.",
     "modifier": "Generic: params.field in production|demand|lane_capacity|lane_risk|tariff|offlane_risk, "
                 "params.op mul|add, params.value; applied to targets.",
     "player_action": "Same as modifier, recorded as caused by the players.",
@@ -45,6 +48,7 @@ class Modifiers:
     lane_tariff: np.ndarray         # (E, G) additive fraction of price
     offlane_risk: np.ndarray        # (N,) additive, applies to jumps touching the system
     relations: dict[str, float] = field(default_factory=dict)
+    legality: list[tuple[np.ndarray, np.ndarray, object]] = field(default_factory=list)  # (systems, goods, value)
     active: list[str] = field(default_factory=list)
 
 
@@ -149,6 +153,8 @@ def build_modifiers(camp: Campaign, tick: int, ix: Index | None = None) -> Modif
             dp, dd = (0.5, 1.0) if ev.type == "disaster" else (1.3, 1.3)
             mod.production[np.ix_(sm, gm)] *= float(p.get("production", dp))
             mod.demand[np.ix_(sm, gm)] *= float(p.get("demand", dd))
+        elif ev.type == "legality":
+            mod.legality.append((systems_mask(ix, t, n), gm, p.get("status", "illegal")))
         elif ev.type == "relations":
             if len(t.polities) >= 2:
                 mod.relations[relation_key(t.polities[0], t.polities[1])] = float(p.get("value", 0.0))
@@ -214,6 +220,9 @@ def random_events(camp: Campaign, tick: int, rng: random.Random) -> list[Event]:
             else:
                 t.systems = [s.id]
             params = dict(pre.params)
+        # presets may aim at particular goods, e.g. martial law on weapons
+        t.goods = list(params.pop("goods", []))
+        t.tags = list(params.pop("tags", []))
         dur = rng.randint(*pre.duration)
         out.append(Event(id=f"R{tick}-{k}", type=pre.type, name=f"{pre.type.replace('_', ' ').title()} (random)",
                          start=tick, duration=dur, targets=t, params=params, source="random"))

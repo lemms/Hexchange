@@ -1,4 +1,4 @@
-import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=4";
+import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=5";
 
 const $ = s => document.querySelector(s);
 const h = (tag, attrs = {}, ...kids) => {

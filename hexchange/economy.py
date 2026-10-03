@@ -88,9 +88,9 @@ class Simulation:
         codes = [set(x.codes) for x in c.systems]
         law = (np.array([float(x.attrs.get(roles.law, 0) or 0) for x in c.systems]) if roles.law
                else np.zeros(self.N))
+        self.law = law
         self.K = np.zeros((self.N, self.G))
         self.D0 = np.zeros((self.N, self.G))
-        self.illegal = np.zeros((self.N, self.G), bool)
         for k, g in enumerate(s.goods):
             pm = np.array([np.prod([g.production.codes.get(cd, 1.0) for cd in cs]) for cs in codes])
             ok = tech >= g.production.min_tech
@@ -100,14 +100,13 @@ class Simulation:
             dm = np.array([np.prod([g.demand.codes.get(cd, 1.0) for cd in cs]) for cs in codes])
             tech_ok = np.where(tech >= g.demand.min_tech, 1.0, 0.25)
             self.D0[:, k] = g.demand.base * self.weight * dm * tech_ok
-            if g.illegal_above_law is not None:
-                self.illegal[:, k] = law > g.illegal_above_law
         gid = {g.id: k for k, g in enumerate(s.goods)}
         self.recipe = np.zeros((self.G, self.G))          # [output, input]
         for k, g in enumerate(s.goods):
             for inp, q in g.inputs.items():
                 self.recipe[k, gid[inp]] = q
         self.manufactured = self.recipe.sum(1) > 0
+        self.illegal = self.legality(ev_mod.build_modifiers(c, c.state.tick, self.ix))
         if c.options.calibrate:
             self._calibrate(c.options.supply_margin)
         # ports
@@ -137,6 +136,50 @@ class Simulation:
             self.share = saved
         else:
             self._shares_from_flows()
+
+    def _apply_rule(self, illegal: np.ndarray, rows: np.ndarray, cols: np.ndarray, value) -> None:
+        if not rows.any() or not cols.any():
+            return
+        if value == "legal":
+            illegal[np.ix_(rows, cols)] = False
+        elif value == "illegal":
+            illegal[np.ix_(rows, cols)] = True
+        else:
+            illegal[np.ix_(rows, cols)] = (self.law[rows] > float(value))[:, None]
+
+    def legality(self, mods: ev_mod.Modifiers | None = None) -> np.ndarray:
+        """(N, G) bool, True where a good is banned.
+
+        Precedence, lowest first: the good's ``illegal_above_law``; polity tag
+        rules; polity good rules; active ``legality`` events (in order)."""
+        s = self.camp.setting
+        illegal = np.zeros((self.N, self.G), bool)
+        for k, g in enumerate(s.goods):
+            if g.illegal_above_law is not None:
+                illegal[:, k] = self.law > g.illegal_above_law
+        tags = [set(g.tags) for g in s.goods]
+        for pol in self.camp.polities:
+            if not pol.legality:
+                continue
+            rows = self.ix.polity_of == pol.id
+            ordered = sorted(pol.legality.items(), key=lambda kv: not kv[0].startswith("tag:"))
+            for key, value in ordered:                     # tag rules first, then specific goods
+                if key.startswith("tag:"):
+                    cols = np.array([key[4:] in t for t in tags])
+                elif key in self.ix.good:
+                    cols = np.zeros(self.G, bool)
+                    cols[self.ix.good[key]] = True
+                else:
+                    continue
+                self._apply_rule(illegal, rows, cols, value)
+        if mods is not None:
+            for rows, cols, value in mods.legality:
+                self._apply_rule(illegal, rows, cols, value)
+        return illegal
+
+    def refresh_legality(self) -> None:
+        """Recompute legality now (after editing laws or events), not just at the next tick."""
+        self.illegal = self.legality(ev_mod.build_modifiers(self.camp, self.camp.state.tick, self.ix))
 
     def _calibrate(self, margin: float) -> None:
         """Scale production per good so total supply = margin x total demand at p_ref.
@@ -222,6 +265,7 @@ class Simulation:
             for e in ev_mod.random_events(c, tick, self.rng):
                 c.events.append(e)
         mods = ev_mod.build_modifiers(c, tick, self.ix)
+        self.illegal = self.legality(mods)
         price, M, I = self._arr("price"), self._arr("stock"), self._arr("input_stock")
 
         # player trades queued for this week
@@ -318,6 +362,7 @@ class Simulation:
         if record:
             st.tick += 1
             self._record_history()
+            self.refresh_legality()          # quotes reflect the new week's laws and events
 
     def _record_history(self) -> None:
         st = self.camp.state
@@ -378,10 +423,12 @@ class Simulation:
         if any(e.id == event.id for e in self.camp.events):
             raise ValueError(f"event id {event.id!r} already exists")
         self.camp.events.append(event)
+        self.refresh_legality()
         return event
 
     def remove_event(self, event_id: str) -> None:
         self.camp.events = [e for e in self.camp.events if e.id != event_id]
+        self.refresh_legality()
 
     def active_events(self) -> list[Event]:
         return [e for e in self.camp.events if e.active(self.camp.state.tick)]
