@@ -7,7 +7,7 @@ Two documents:
   goods, name syllables, generation and event presets.  The engine itself
   knows nothing about any particular game.
 * **Campaign** (``*.hexchange.json``): one galaxy -- an embedded copy of its
-  setting, the generated systems, polities and lanes, the DM's events, and the
+  setting, the generated systems, polities and lanes, the GM's events, and the
   simulation state.
 
 Both are pydantic models, so loading validates the file and
@@ -20,7 +20,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class _Model(BaseModel):
@@ -263,7 +263,7 @@ class Event(_Model):
     duration: int | None = Field(None, description="weeks; None = until removed")
     targets: Targets = Field(default_factory=Targets)
     params: dict[str, Any] = Field(default_factory=dict)
-    source: Literal["dm", "player", "random"] = "dm"
+    source: Literal["gm", "player", "random"] = "gm"
     notes: str = ""
 
     def active(self, tick: int) -> bool:

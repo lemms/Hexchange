@@ -39,13 +39,14 @@ export class HexMap {
     this.view = { x: 0, y: 0, w: 100, h: 100 };
     this.selected = null; this.multi = new Set(); this.selLane = null;
     this.layers = {};
-    for (const name of ["hex", "smug", "lanes", "path", "sys", "labels"]) this.layers[name] = el("g", {}, svg);
+    for (const name of ["hex", "smug", "lanes", "path", "unk", "sys", "labels"]) this.layers[name] = el("g", {}, svg);
     this._interact();
   }
 
   load(data) {
     this.data = data;
-    this.byId = Object.fromEntries(data.systems.map(s => [s.id, s]));
+    this.byId = Object.fromEntries([...(data.unknown || []).map(u => [u.id, { ...u, unknown: true }]),
+                                    ...data.systems.map(s => [s.id, s])]);
     this.polity = Object.fromEntries(data.polities.map(p => [p.id, p]));
     const W = R * 1.5 * data.width + R * 1.5, H = R * SQ3 * (data.height + 0.5) + R;
     this.bounds = { w: W, h: H };
@@ -63,10 +64,17 @@ export class HexMap {
     for (const ln of data.lanes) {
       const a = this.byId[ln.a], b = this.byId[ln.b];
       const [x1, y1] = hexCenter(a.col, a.row), [x2, y2] = hexCenter(b.col, b.row);
-      const line = el("line", { x1, y1, x2, y2, class: "lane", "stroke-width": 1.2 }, this.layers.lanes);
+      const out = a.unknown || b.unknown;        // player view: lane leading into uncharted space
+      const line = el("line", { x1, y1, x2, y2, class: out ? "lane out" : "lane", "stroke-width": 1.2 }, this.layers.lanes);
       line.addEventListener("click", e => { e.stopPropagation(); this.selectLane(ln.id); });
       line.style.cursor = "pointer";
       this.laneEls[ln.id] = line;
+    }
+    // uncharted endpoints (player view): position only
+    for (const u of data.unknown || []) {
+      const [x, y] = hexCenter(u.col, u.row);
+      const c = el("circle", { cx: x, cy: y, r: 2.6, class: "unk" }, this.layers.unk);
+      el("title", {}, c).textContent = `Uncharted system (${u.id})`;
     }
     // systems
     this.sysEls = {};
@@ -161,6 +169,20 @@ export class HexMap {
     this.selLane = id;
     this.laneEls[id]?.classList.add("sel");
     this.onLane?.(id);
+  }
+
+  fitTo(ids, margin = 3) {
+    const pts = ids.map(id => this.byId[id]).filter(Boolean).map(s => hexCenter(s.col, s.row));
+    if (!pts.length) return;
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const pad = R * margin;
+    let x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad, y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
+    const r = this.svg.getBoundingClientRect(), aspect = (r.width || 4) / (r.height || 3);
+    let w = Math.max(x1 - x0, 140), h = Math.max(y1 - y0, 140 / aspect);
+    if (w / h < aspect) w = h * aspect; else h = w / aspect;      // keep the screen's aspect ratio
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    this.view = { x: cx - w / 2, y: cy - h / 2, w, h };
+    this._apply();
   }
 
   centerOn(id) {

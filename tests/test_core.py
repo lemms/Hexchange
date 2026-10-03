@@ -354,3 +354,13 @@ def test_most_ports_have_trade_routes(setting):
     ports = [x.id for x in camp.systems if setting.ports[str(x.attrs["port"])].lanes]
     with_routes = sum(bool(hx.find_routes(sim, sid, cargo_tons=200, jump=2, max_jumps=3)) for sid in ports)
     assert with_routes / len(ports) > 0.8
+
+
+def test_old_campaigns_migrate_dm_to_gm(setting, tmp_path):
+    camp = hx.generate(setting, width=8, height=8, seed=1)
+    data = json.loads(camp.model_dump_json())
+    data["schema_version"] = 1
+    data["events"] = [{"id": "e", "type": "boom", "name": "Boom", "start": 0, "source": "dm"}]
+    (tmp_path / "old.hexchange.json").write_text(json.dumps(data))
+    back = hx.load_campaign(tmp_path / "old.hexchange.json")
+    assert back.events[0].source == "gm" and back.schema_version == 2

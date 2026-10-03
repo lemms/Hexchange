@@ -324,6 +324,7 @@
             "disaster",
             "boom",
             "relations",
+            "legality",
             "modifier",
             "player_action"
           ],
@@ -360,9 +361,9 @@
           "type": "object"
         },
         "source": {
-          "default": "dm",
+          "default": "gm",
           "enum": [
-            "dm",
+            "gm",
             "player",
             "random"
           ],
@@ -578,6 +579,68 @@
       "title": "LaneParams",
       "type": "object"
     },
+    "LegalityOption": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "enum": [
+                "legal",
+                "illegal"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Value"
+        },
+        "weight": {
+          "default": 1.0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "title": "LegalityOption",
+      "type": "object"
+    },
+    "LegalityPreset": {
+      "additionalProperties": false,
+      "description": "At generation each polity picks one option for these goods/tags.",
+      "properties": {
+        "goods": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Goods",
+          "type": "array"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/LegalityOption"
+          },
+          "title": "Options",
+          "type": "array"
+        }
+      },
+      "required": [
+        "options"
+      ],
+      "title": "LegalityPreset",
+      "type": "object"
+    },
     "MarketState": {
       "additionalProperties": false,
       "description": "Arrays indexed [system][good] in the order of ``systems`` and ``setting.goods``.",
@@ -661,6 +724,12 @@
           "title": "Supply Margin",
           "type": "number"
         },
+        "trade_inertia": {
+          "default": true,
+          "description": "commercial shipping ramps up over weeks instead of re-routing instantly, so shocks leave exploitable gaps",
+          "title": "Trade Inertia",
+          "type": "boolean"
+        },
         "history_length": {
           "default": 52,
           "title": "History Length",
@@ -720,6 +789,25 @@
           ],
           "default": null,
           "title": "Capital"
+        },
+        "legality": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "enum": [
+                  "legal",
+                  "illegal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "description": "good id or 'tag:<tag>' -> 'legal' | 'illegal' | N (illegal where law > N). Good rules beat tag rules, which beat the good's own illegal_above_law.",
+          "title": "Legality",
+          "type": "object"
         }
       },
       "required": [
@@ -884,7 +972,7 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "default": 1,
+          "default": 2,
           "title": "Schema Version",
           "type": "integer"
         },
@@ -951,6 +1039,13 @@
         "lanes": {
           "$ref": "#/$defs/LaneParams"
         },
+        "volume_scale": {
+          "default": 1.0,
+          "description": "multiplies every production and demand rate and every lane capacity: how many tons a week move in this universe, relative to the ships trading in it",
+          "exclusiveMinimum": 0,
+          "title": "Volume Scale",
+          "type": "number"
+        },
         "name_syllables": {
           "items": {
             "type": "string"
@@ -970,6 +1065,14 @@
             "$ref": "#/$defs/RandomEvent"
           },
           "title": "Random Events",
+          "type": "array"
+        },
+        "polity_legality": {
+          "description": "how polities' laws on goods are rolled at generation",
+          "items": {
+            "$ref": "#/$defs/LegalityPreset"
+          },
+          "title": "Polity Legality",
           "type": "array"
         },
         "disclaimer": {
@@ -1223,7 +1326,7 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "default": 1,
+      "default": 2,
       "title": "Schema Version",
       "type": "integer"
     },

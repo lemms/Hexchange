@@ -1,4 +1,4 @@
-import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=5";
+import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=7";
 
 const $ = sel => document.querySelector(sel);
 const h = (tag, attrs = {}, ...kids) => {
@@ -228,7 +228,7 @@ async function showSystem(id) {
     h("h3", {}, "Lanes"),
     h("div", {}, ...d.lanes.map(l => h("span", { class: "pill", style: "cursor:pointer", onclick: () => map.selectLane(l.id) },
       `${l.a === id ? l.b : l.a} (${l.length} ${camp.setting.distance_unit})`))),
-    h("h3", {}, "DM notes"), notes,
+    h("h3", {}, "GM notes"), notes,
     h("div", { class: "row" }, h("button", { onclick: () => guard(async () => {
       await api(`/api/system/${id}/notes`, { method: "PUT", body: { notes: notes.value } }); toast("Notes saved");
     }) }, "Save notes")),
@@ -266,7 +266,7 @@ async function renderEvents() {
   const name = h("input", { placeholder: "Event name", style: "width:100%" });
   const start = h("input", { type: "number", value: camp.tick });
   const dur = h("input", { type: "number", placeholder: "∞", min: 1 });
-  const source = h("select", {}, h("option", { value: "dm" }, "DM"), h("option", { value: "player" }, "Players"));
+  const source = h("select", {}, h("option", { value: "gm" }, "GM"), h("option", { value: "player" }, "Players"));
   const polBoxes = camp.polities.map(p => h("label", { class: "pill" }, h("input", { type: "checkbox", value: p.id }), " ", p.name));
   const goodsSel = h("select", { multiple: true, size: 4, style: "width:100%" }, ...goods.map(g => h("option", { value: g.id }, g.name)));
   const tags = h("input", { placeholder: "tags, comma separated (e.g. military)", style: "width:100%" });
@@ -427,7 +427,7 @@ async function renderPlayers() {
   pane.replaceChildren(
     h("h2", {}, "Player view"),
     h("p", { class: "muted" }, "Players open ", h("a", { href: "/player", target: "_blank", style: "color:var(--accent)" }, location.origin + "/player"),
-      " — they see the map, and market prices only for the systems listed here."),
+      " — they see only the systems listed here (with their markets) and the lanes leading out of them. Everything else stays blank."),
     h("div", { class: "row" },
       h("button", { onclick: () => guard(async () => {
         const ids = new Set([...vis, ...eventSystems()]); await setVisible([...ids]);

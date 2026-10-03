@@ -65,3 +65,30 @@ def test_polity_law_editing(client):
     client.put(f"/api/polities/{pid}/legality", json={"key": "arms", "value": "illegal"})
     row = next(m for m in client.get(f"/api/system/{sid}").json()["market"] if m["good"] == "arms")
     assert row["legal"] is False
+
+
+def test_player_view_reveals_only_shared_systems(client):
+    camp = client.post("/api/generate", json={"setting": "generic", "width": 12, "height": 12, "seed": 2,
+                                              "warmup": 2}).json()
+    hidden = camp["systems"][-1]
+    r = client.get("/api/player/campaign")
+    data = r.json()
+    assert data["systems"] == [] and data["lanes"] == [] and data["polities"] == []
+    assert hidden["id"] not in r.text and hidden["name"] not in r.text
+    # reveal one system: its lanes show, the far ends only as anonymous positions
+    shown = camp["lanes"][0]["a"]
+    out_lanes = {ln["id"] for ln in camp["lanes"] if shown in (ln["a"], ln["b"])}
+    far = {ln["b"] if ln["a"] == shown else ln["a"] for ln in camp["lanes"] if ln["id"] in out_lanes}
+    client.put("/api/player_view", json={"visible_systems": [shown], "show_flows": False})
+    r = client.get("/api/player/campaign")
+    data = r.json()
+    assert [x["id"] for x in data["systems"]] == [shown]
+    assert {ln["id"] for ln in data["lanes"]} == out_lanes
+    assert {u["id"] for u in data["unknown"]} == far
+    assert set(data["unknown"][0]) == {"id", "col", "row"}
+    names = {s["id"]: s["name"] for s in camp["systems"]}
+    for sid in far:
+        assert names[sid] not in r.text                     # far ends stay anonymous
+    assert all(set(ln) == {"id", "a", "b", "length"} for ln in data["lanes"])
+    assert data["relations"] == {} and data["event_help"] == {}
+    assert all("legality" not in p for p in data["polities"])

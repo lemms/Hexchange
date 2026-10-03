@@ -3,7 +3,7 @@
 A galactic economy engine for tabletop sci-fi campaigns. Hexchange simulates a hex-grid
 galaxy: star systems produce and consume goods, charted hyperlanes link them, and smugglers
 make uncharted jumps. Prices settle into a spatial equilibrium that players can exploit by
-trading with their ships. The DM adds wars, embargoes, tariffs, piracy, disasters and booms,
+trading with their ships. The GM adds wars, embargoes, tariffs, piracy, disasters and booms,
 and the economy reacts.
 
 Hexchange is genre-neutral. Everything specific to a game comes from a **setting file**:
@@ -29,8 +29,8 @@ hexchange serve campaign.hexchange.json                 # web UI: http://127.0.0
 ```
 
 In the UI, click **New sector…** to generate a galaxy. Changes autosave to the campaign file;
-**Save** lets you save elsewhere or download a copy. The DM view is at `/` and the player
-view at `/player`. Players see the map, plus market prices only at the systems the DM shares.
+**Save** lets you save elsewhere or download a copy. The GM view is at `/` and the player
+view at `/player`. Players see nothing until the GM reveals systems: then only those systems and their markets, plus the lanes leading out of them to uncharted (unnamed) endpoints. Hidden systems are never sent to the player's browser.
 
 Without the UI:
 
@@ -107,7 +107,7 @@ Each good can have a default law-level threshold (`illegal_above_law`). Each pol
 override it, by good or by tag, with `legal`, `illegal`, or "illegal above law N". At
 generation, polities roll their laws from the setting's `polity_legality` presets, so
 neighbouring regions differ. A `legality` event changes laws temporarily, e.g. martial law.
-The DM edits polity laws in the Politics tab.
+The GM edits polity laws in the Politics tab.
 
 ### Smugglers
 
@@ -124,7 +124,7 @@ border rose 3.6× and import prices inside rose up to 3.9×.
 Events are non-destructive modifiers. Ending one restores the galaxy exactly. The built-in
 types are `war`, `embargo`, `tariff`, `lane_disruption`, `piracy`, `disaster`, `boom`,
 `relations`, and the generic `modifier` / `player_action`, which take `field`, `op` and
-`value`. Players' political impact is recorded as a `player_action` event by the DM. Random
+`value`. Players' political impact is recorded as a `player_action` event by the GM. Random
 events (the setting's presets) can be switched on per campaign.
 
 ## File formats

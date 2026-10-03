@@ -1,4 +1,4 @@
-import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=5";
+import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=7";
 
 const $ = s => document.querySelector(s);
 const h = (tag, attrs = {}, ...kids) => {
@@ -19,7 +19,10 @@ async function load() {
   gs.replaceChildren(...camp.setting.goods.map(g => h("option", { value: g.id }, g.name)));
   if (prev) gs.value = prev;
   map.load(camp);
+  map.fitTo([...camp.systems.map(s => s.id), ...(camp.unknown || []).map(u => u.id)]);   // zoom to what is known
   overlay();
+  if (!camp.systems.length)
+    $("#pane").replaceChildren(h("p", { class: "muted" }, "Your GM hasn't revealed any systems yet."));
 }
 
 async function overlay() {
@@ -28,7 +31,8 @@ async function overlay() {
   if (mode === "polity") {
     map.colorByPolity();
     $("#legend").replaceChildren(h("strong", {}, "Polities"),
-      ...camp.polities.map(p => h("div", {}, h("span", { style: `color:${p.color}` }, "● "), p.name)));
+      ...(camp.polities.length ? camp.polities.map(p => h("div", {}, h("span", { style: `color:${p.color}` }, "● "), p.name))
+        : [h("div", { class: "muted" }, "none known")]));
   } else {
     const g = $("#goodSel").value;
     const prices = await api(`/api/player/prices?good=${encodeURIComponent(g)}`);
@@ -45,7 +49,6 @@ async function showSystem(id) {
   const s = map.byId[id];
   const pane = $("#pane");
   const head = h("h2", {}, `${s.name} `, h("span", { class: "muted mono" }, `${s.id} · ${s.profile}`));
-  if (!s.visible) { pane.replaceChildren(head, h("p", { class: "muted" }, "No market reports from this system.")); return; }
   const d = await api(`/api/player/system/${id}`);
   const cur = camp.setting.currency;
   pane.replaceChildren(head,
@@ -59,4 +62,4 @@ map = new HexMap($("#map"), { onSelect: (id, add) => { if (!add) showSystem(id);
 $("#mode").onchange = overlay;
 $("#goodSel").onchange = overlay;
 $("#refresh").onclick = load;
-load().catch(e => { $("#pane").textContent = "The DM has not opened a campaign yet."; console.error(e); });
+load().catch(e => { $("#pane").textContent = "The GM has not opened a campaign yet."; console.error(e); });

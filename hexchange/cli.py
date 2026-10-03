@@ -89,7 +89,7 @@ def cmd_serve(a) -> int:
         print("the web UI needs the server extra: pip install 'hexchange[server]'", file=sys.stderr)
         return 1
     app = create_app(a.campaign, a.settings_dir)
-    print(f"Hexchange: DM view http://{a.host}:{a.port}/   player view http://{a.host}:{a.port}/player")
+    print(f"Hexchange: GM view http://{a.host}:{a.port}/   player view http://{a.host}:{a.port}/player")
     uvicorn.run(app, host=a.host, port=a.port, log_level="warning")
     return 0
 

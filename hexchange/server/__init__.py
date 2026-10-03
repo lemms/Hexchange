@@ -1,4 +1,4 @@
-"""Local web server: DM interface at ``/``, read-only player view at ``/player``.
+"""Local web server: GM interface at ``/``, read-only player view at ``/player``.
 
 Requires the ``server`` extra (fastapi, uvicorn).  One campaign is held in
 memory; every change is written back to its file when one is set.
@@ -66,8 +66,17 @@ class State:
 
 
 def _map_payload(sim: Simulation, player: bool = False) -> dict[str, Any]:
+    """Map data.  For players, only systems the GM has revealed are included, plus
+    the lanes leading out of them.  The far end of such a lane is sent as an
+    anonymous position only (``unknown``), so nothing hidden reaches the browser."""
     c, s = sim.camp, sim.camp.setting
     visible = set(c.player_view.visible_systems)
+    systems = [x for x in c.systems if x.id in visible] if player else c.systems
+    lanes = [ln for ln in c.lanes if ln.a in visible or ln.b in visible] if player else c.lanes
+    by_id = {x.id: x for x in c.systems}
+    unknown = sorted({sid for ln in lanes for sid in (ln.a, ln.b) if sid not in visible}) if player else []
+    owners = {x.polity for x in systems}
+    polities = [p for p in c.polities if p.id in owners] if player else c.polities
     return {
         "name": c.name, "width": c.width, "height": c.height, "tick": c.state.tick,
         "setting": {
@@ -82,15 +91,15 @@ def _map_payload(sim: Simulation, player: bool = False) -> dict[str, Any]:
             "roles": s.roles.model_dump(),
         },
         "systems": [{"id": x.id, "name": x.name, "col": x.col, "row": x.row, "profile": profile(s, x.attrs),
-                     "attrs": x.attrs, "codes": x.codes, "polity": x.polity,
-                     "visible": (x.id in visible) if player else True} for x in c.systems],
-        "lanes": [ln.model_dump() for ln in c.lanes],
-        "polities": [p.model_dump() for p in c.polities],
-        "relations": c.relations,
-        "options": c.options.model_dump(),
-        "player_view": c.player_view.model_dump(),
-        "event_help": EVENT_HELP if not player else {},
-        "active_events": [e.id for e in sim.active_events()],
+                     "attrs": x.attrs, "codes": x.codes, "polity": x.polity, "visible": True} for x in systems],
+        "lanes": [ln.model_dump(include={"id", "a", "b", "length"}) if player else ln.model_dump() for ln in lanes],
+        "unknown": [{"id": sid, "col": by_id[sid].col, "row": by_id[sid].row} for sid in unknown],
+        "polities": [p.model_dump(exclude={"legality"}) if player else p.model_dump() for p in polities],
+        "relations": {} if player else c.relations,
+        "options": {} if player else c.options.model_dump(),
+        "player_view": {} if player else c.player_view.model_dump(),
+        "event_help": {} if player else EVENT_HELP,
+        "active_events": [] if player else [e.id for e in sim.active_events()],
     }
 
 
@@ -398,10 +407,7 @@ def create_app(campaign_path: str | None = None, settings_dirs: list[str] | None
     @app.get("/api/player/campaign")
     def player_campaign():
         with st.lock:
-            sim = st.need()
-            data = _map_payload(sim, player=True)
-            data["relations"] = {}
-            return data
+            return _map_payload(st.need(), player=True)
 
     @app.get("/api/player/prices")
     def player_prices(good: str):

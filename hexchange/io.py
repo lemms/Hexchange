@@ -77,7 +77,11 @@ def _migrate(data: dict) -> dict:
     v = int(data.get("schema_version", SCHEMA_VERSION))
     if v > SCHEMA_VERSION:
         raise ValueError(f"file schema version {v} is newer than this hexchange ({SCHEMA_VERSION})")
-    # future: step-wise upgrades from older versions go here
+    if v < 2:                                   # v2: event source "dm" renamed to "gm"
+        for ev in data.get("events", []):
+            if ev.get("source") == "dm":
+                ev["source"] = "gm"
+    data["schema_version"] = SCHEMA_VERSION
     return data
 
 

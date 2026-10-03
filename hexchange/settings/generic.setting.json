@@ -1,5 +1,5 @@
 {
- "schema_version": 1,
+ "schema_version": 2,
  "name": "Generic Frontier",
  "description": "Setting-neutral sci-fi defaults bundled with hexchange. Copy and edit, or write your own.",
  "currency": "cr",

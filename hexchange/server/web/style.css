@@ -70,6 +70,8 @@ svg text { pointer-events: none; user-select: none; }
 .hex { fill: none; stroke: #1b2232; stroke-width: 0.6; }
 .lane { stroke: var(--lane); stroke-linecap: round; }
 .lane.sel { stroke: var(--warn) !important; }
+.lane.out { stroke-dasharray: 2 2; opacity: .7; }
+.unk { fill: none; stroke: #6b7894; stroke-width: 1; stroke-dasharray: 1.5 1.5; }
 .smug { stroke: #c77dff; stroke-dasharray: 3 3; stroke-linecap: round; opacity: .8; }
 .sys { stroke: #0b0e14; stroke-width: 1.2; cursor: pointer; }
 .sys.sel { stroke: #fff; stroke-width: 2.5; }
