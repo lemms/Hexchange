@@ -144,9 +144,13 @@ def solve(curves: Curves, net: Network, p0: np.ndarray | None = None, tau: float
         sig = _sigmoid(z)
         w = cap * sig * (1 - sig) / tau
         diag = dS - dD + mu
-        rows = np.concatenate([np.arange(n), t, h, t, h])
-        cols = np.concatenate([np.arange(n), t, h, h, t])
-        vals = np.concatenate([diag, w, w, -w, -w])
+        # links far from their switching point contribute ~nothing to the Hessian;
+        # leaving them out keeps the matrix sparse (most smuggler links are idle)
+        live = w > 1e-9 * max(float(w.max(initial=0.0)), float(diag.max(initial=0.0)), 1e-300)
+        tl, hl, wl = t[live], h[live], w[live]
+        rows = np.concatenate([np.arange(n), tl, hl, tl, hl])
+        cols = np.concatenate([np.arange(n), tl, hl, hl, tl])
+        vals = np.concatenate([diag, wl, wl, -wl, -wl])
         H = coo_matrix((vals, (rows, cols)), shape=(n, n)).tocsr()
         step = -spsolve(H, g)
         # keep prices positive: at most a 5x fall per Newton step

@@ -20,7 +20,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class _Model(BaseModel):
@@ -211,11 +211,33 @@ class Setting(_Model):
 
 # --------------------------------------------------------------------------- campaign
 
-class StarSystem(_Model):
-    id: str = Field(..., description="hex label, e.g. '0304' (column, row)")
+class Sector(_Model):
+    """A named rectangle of the global hex grid.  ``col0`` is even so hex offsets
+    line up across sectors."""
+
+    id: str
     name: str
-    col: int
-    row: int
+    col0: int = 0
+    row0: int = 0
+    width: int = 32
+    height: int = 40
+    notes: str = ""
+
+    def contains(self, col: int, row: int) -> bool:
+        return self.col0 <= col < self.col0 + self.width and self.row0 <= row < self.row0 + self.height
+
+    def label(self, col: int, row: int) -> str:
+        """Local hex label, e.g. '0304' (column, row within the sector, 1-based)."""
+        return f"{col - self.col0 + 1:02d}{row - self.row0 + 1:02d}"
+
+
+class StarSystem(_Model):
+    id: str = Field(..., description="unique id; in the first sector the hex label (e.g. '0304'), "
+                                     "elsewhere '<sector>-<label>'. Never contains '~'.")
+    name: str
+    sector: str = "S1"
+    col: int = Field(..., description="global column")
+    row: int = Field(..., description="global row")
     attrs: dict[str, int | str]
     codes: list[str] = Field(default_factory=list)
     polity: str | None = None
@@ -344,9 +366,10 @@ class Campaign(_Model):
     schema_version: int = SCHEMA_VERSION
     format: Literal["hexchange-campaign"] = "hexchange-campaign"
     name: str
-    width: int
-    height: int
+    width: int = Field(..., description="extent of the whole galaxy in columns")
+    height: int = Field(..., description="extent of the whole galaxy in rows")
     setting: Setting
+    sectors: list[Sector] = Field(default_factory=list)
     systems: list[StarSystem]
     polities: list[Polity] = Field(default_factory=list)
     relations: dict[str, float] = Field(default_factory=dict, description="'p1|p2' (sorted) -> -1..1")
@@ -362,6 +385,23 @@ class Campaign(_Model):
         ids = {s.id for s in self.systems}
         if len(ids) != len(self.systems):
             raise ValueError("duplicate system ids")
+        if any("~" in i for i in ids):
+            raise ValueError("system ids may not contain '~'")
+        if self.sectors:
+            secs = {s.id: s for s in self.sectors}
+            if len(secs) != len(self.sectors):
+                raise ValueError("duplicate sector ids")
+            for s in self.systems:
+                sec = secs.get(s.sector)
+                if sec is None:
+                    raise ValueError(f"system {s.id} references unknown sector {s.sector}")
+                if not sec.contains(s.col, s.row):
+                    raise ValueError(f"system {s.id} lies outside its sector {sec.id}")
+            occupied = {}
+            for s in self.systems:
+                if (s.col, s.row) in occupied:
+                    raise ValueError(f"systems {occupied[(s.col, s.row)]} and {s.id} share a hex")
+                occupied[(s.col, s.row)] = s.id
         for ln in self.lanes:
             if ln.a not in ids or ln.b not in ids:
                 raise ValueError(f"lane {ln.id} references unknown system")
@@ -370,6 +410,10 @@ class Campaign(_Model):
             if s.polity is not None and s.polity not in pids:
                 raise ValueError(f"system {s.id} references unknown polity {s.polity}")
         return self
+
+
+def sector_of(camp: "Campaign", system: StarSystem) -> Sector | None:
+    return next((s for s in camp.sectors if s.id == system.sector), None)
 
 
 def relation_key(a: str, b: str) -> str:

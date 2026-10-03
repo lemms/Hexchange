@@ -1,4 +1,4 @@
-import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=8";
+import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=12";
 
 const $ = sel => document.querySelector(sel);
 const h = (tag, attrs = {}, ...kids) => {
@@ -28,6 +28,7 @@ const DEFAULT_PARAMS = {
 
 let camp = null, map = null, goods = [], goodName = {}, currency = "";
 let selected = null, lastRoutes = [];
+let editMode = false, paintPolity = undefined;   // undefined = not painting; null = paint "unaligned"
 
 function toast(msg, bad = false) {
   const t = $("#toast"); t.textContent = msg; t.style.borderColor = bad ? "var(--bad)" : "";
@@ -37,13 +38,14 @@ async function guard(fn) { try { return await fn(); } catch (e) { toast(e.messag
 
 // ------------------------------------------------------------------ boot
 async function boot() {
-  map = new HexMap($("#map"), { onSelect: onSelect, onLane: showLane });
+  map = new HexMap($("#map"), { onSelect: onSelect, onLane: showLane, onHex: onHex });
   wireHeader(); wireTabs(); wireOverlay(); await loadSettings();
   try { setCampaign(await api("/api/campaign")); }
   catch { $("#genDlg").showModal(); }
 }
 
-function setCampaign(data) {
+function setCampaign(data, keepView = false) {
+  const keepSel = keepView ? selected : null;
   window.__hxlog?.("boot", { systems: data.systems.length, tick: data.tick });
   camp = data; goods = data.setting.goods; currency = data.setting.currency;
   goodName = Object.fromEntries(goods.map(g => [g.id, g.name]));
@@ -52,12 +54,184 @@ function setCampaign(data) {
   const gs = $("#goodSel"); const prev = gs.value;
   gs.replaceChildren(h("option", { value: "" }, "All goods (value)"), ...goods.map(g => h("option", { value: g.id }, g.name)));
   gs.value = goods.some(g => g.id === prev) ? prev : (goods[0]?.id || "");
-  map.load(data);
+  const multi = keepView ? [...map.multi] : [];
+  map.load(data, { keepView });
   map.setParty(data.player_view.location);
   selected = null;
-  refreshOverlay(); renderEvents(); renderRoutesForm(); renderPolitics(); renderPlayers();
+  refreshOverlay(); renderEvents(); renderRoutesForm(); renderPolitics(); renderPlayers(); renderMapTab();
+  for (const id of multi) if (map.byId[id] && !map.byId[id].unknown) map.select(id, true, { silent: true });
+  if (keepSel && map.byId[keepSel]) {
+    // restore the selection quietly; refresh the system pane only if it is the one showing
+    map.select(keepSel, false, { silent: true });
+    selected = keepSel;
+    renderRoutesForm(); renderPolitics();
+    if ($("#pane-system").classList.contains("on")) editMode ? showEditor(keepSel) : showSystem(keepSel);
+    return;
+  }
   $("#pane-system").replaceChildren(h("p", { class: "muted" }, "Click a system on the map. Shift-click to select several (for events)."),
     data.setting.disclaimer ? h("p", { class: "disclaimer" }, data.setting.disclaimer) : null);
+}
+
+// ------------------------------------------------------------------ GM editing
+async function applyEdit(path, method, body, message) {
+  const data = await api(path, { method, body });
+  setCampaign(data, true);
+  if (message) toast(message);
+  return data.result;
+}
+
+function setEditMode(on) {
+  editMode = on;
+  map.setEditMode(on);
+  $("#editBtn").classList.toggle("on", on);
+  $("#editBtn").textContent = on ? "Editing map — done" : "Edit map";
+  if (on) {
+    showTab("map");
+    toast("Edit mode: click an empty hex to add a system, click a system to edit it");
+  }
+  if (selected) map.select(selected);
+}
+
+function attrInputs(values = {}) {
+  // one input per setting attribute: numbers within range, categories as a select
+  const inputs = {};
+  const rows = camp.setting.attributes.map(a => {
+    const v = values[a.key];
+    const inp = a.kind === "category"
+      ? h("select", {}, h("option", { value: "" }, "roll"), ...a.values.map(x => h("option", { value: x }, x + (a.descriptions[x] ? ` — ${a.descriptions[x]}` : ""))))
+      : h("input", { type: "number", min: a.min, max: a.max, placeholder: "roll", style: "width:70px" });
+    if (v !== undefined) inp.value = v;
+    inputs[a.key] = inp;
+    return [h("span", { class: "muted" }, a.name), h("span", {}, inp, a.kind === "category" ? "" : h("span", { class: "muted" }, ` ${a.min}–${a.max}`))];
+  });
+  const read = () => Object.fromEntries(Object.entries(inputs).filter(([, i]) => i.value !== "")
+    .map(([k, i]) => [k, i.tagName === "SELECT" ? i.value : Number(i.value)]));
+  return { grid: h("div", { class: "grid2" }, ...rows.flat()), read };
+}
+
+function onHex(col, row) {
+  if (!editMode) return;
+  if (map.data.systems.some(s => s.col === col && s.row === row)) return;
+  showTab("system");
+  const sec = (camp.sectors || []).find(s => col >= s.col0 && col < s.col0 + s.width && row >= s.row0 && row < s.row0 + s.height);
+  const label = sec ? `${String(col - sec.col0 + 1).padStart(2, "0")}${String(row - sec.row0 + 1).padStart(2, "0")}` : "";
+  const name = h("input", { placeholder: "name (blank = random)", style: "width:100%" });
+  const attrs = attrInputs();
+  $("#pane-system").replaceChildren(
+    h("h2", {}, "New system ", h("span", { class: "muted mono" }, `${sec?.name || ""} ${label}`)),
+    h("p", { class: "muted" }, "Leave attributes blank to roll them with the setting's dice; trade codes are worked out automatically."),
+    name, h("h3", {}, "Attributes"), attrs.grid,
+    h("div", { class: "row" }, h("button", { class: "primary", onclick: () => guard(async () => {
+      const res = await applyEdit("/api/systems", "POST", { col, row, name: name.value || null, attrs: attrs.read() }, "System added");
+      map.select(res.id);
+    }) }, "Add system"), h("button", { onclick: () => $("#pane-system").replaceChildren() }, "Cancel")));
+}
+
+async function showEditor(id) {
+  const s = map.byId[id];
+  const name = h("input", { value: s.name, style: "width:100%" });
+  const attrs = attrInputs(s.attrs);
+  const lanes = camp.lanes.filter(l => l.a === id || l.b === id);
+  const others = [...map.multi].filter(x => x !== id);
+  const pol = camp.polities.find(p => p.id === s.polity);
+  $("#pane-system").replaceChildren(
+    h("h2", {}, "Edit ", h("span", { class: "mono" }, `${map.place(id)} · ${s.profile}`)),
+    h("div", {}, pol ? h("span", { class: "pill", style: `border-color:${pol.color};color:${pol.color}` }, pol.name) : h("span", { class: "pill" }, "Unaligned"),
+      ...s.codes.map(c => h("span", { class: "pill" }, c))),
+    h("h3", {}, "Name"), name,
+    h("h3", {}, "Attributes"), attrs.grid,
+    h("div", { class: "row" },
+      h("button", { class: "primary", onclick: () => guard(() => applyEdit(`/api/systems/${id}`, "PUT", { name: name.value, attrs: attrs.read() }, "System updated")) }, "Save"),
+      h("button", { onclick: () => guard(() => applyEdit(`/api/systems/${id}/reroll`, "POST", {}, "Attributes rerolled")) }, "Reroll"),
+      h("button", { class: "danger", onclick: ev => guard(async () => {
+        if (!confirmButton(ev.target)) return;
+        await applyEdit(`/api/systems/${id}`, "DELETE", undefined, `${s.name} removed`);
+        $("#pane-system").replaceChildren();
+      }) }, "Delete system")),
+    h("h3", {}, `Lanes (${lanes.length})`),
+    ...lanes.map(l => laneRow(l)),
+    h("div", { class: "row" },
+      ...others.map(o => h("button", { onclick: () => guard(() => applyEdit("/api/lanes", "POST", { a: id, b: o }, `Lane ${s.name} – ${map.byId[o].name} added`)) },
+        `Connect to ${map.byId[o].name}`)),
+      h("button", { onclick: () => guard(() => applyEdit("/api/lanes/auto", "POST", { systems: [id, ...others] }, "Lanes generated")) }, "Auto-lane")),
+    h("p", { class: "muted" }, "Shift-click other systems, then Connect. Auto-lane links these systems to their neighbours the way the generator does; existing lanes are kept."),
+  );
+}
+
+function confirmButton(btn) {
+  // two-step confirm without dialogs: first click arms the button
+  if (btn.dataset.armed) return true;
+  btn.dataset.armed = "1"; const label = btn.textContent; btn.textContent = "Click again to confirm";
+  setTimeout(() => { delete btn.dataset.armed; btn.textContent = label; }, 3000);
+  return false;
+}
+
+function laneRow(l) {
+  const other = map.byId[l.a === selected ? l.b : l.a] || map.byId[l.b];
+  const cap = h("input", { type: "number", value: l.capacity, min: 0, style: "width:90px" });
+  const risk = h("input", { type: "number", value: l.risk, min: 0, max: 1, step: 0.005, style: "width:70px" });
+  const toll = h("input", { type: "number", value: l.toll, min: 0, style: "width:70px" });
+  return h("div", { class: "card" },
+    h("div", {}, h("strong", {}, `${map.byId[l.a]?.name} — ${map.byId[l.b]?.name}`), h("span", { class: "muted" }, ` · ${l.length} ${camp.setting.distance_unit}`)),
+    h("div", { class: "row" }, "cap", cap, "risk", risk, "toll", toll,
+      h("button", { onclick: () => guard(() => applyEdit(`/api/lanes/${l.id}`, "PUT",
+        { capacity: Number(cap.value), risk: Number(risk.value), toll: Number(toll.value) }, "Lane updated")) }, "Save"),
+      h("button", { class: "danger", onclick: ev => guard(async () => {
+        if (!confirmButton(ev.target)) return;
+        await applyEdit(`/api/lanes/${l.id}`, "DELETE", undefined, "Lane removed");
+      }) }, "Delete")));
+}
+
+// ------------------------------------------------------------------ map tab: sectors
+function renderMapTab() {
+  if (!camp) return;
+  const pane = $("#pane-map");
+  const secs = camp.sectors || [];
+  const count = {};
+  for (const s of camp.systems) count[s.sector] = (count[s.sector] || 0) + 1;
+  const name = h("input", { placeholder: "sector name", value: "" });
+  const ref = h("select", {}, ...secs.map(s => h("option", { value: s.id }, s.name)));
+  const dir = h("select", {}, ...[["E", "east of"], ["W", "west of"], ["N", "north of"], ["S", "south of"]].map(([v, t]) => h("option", { value: v }, t)));
+  const w = h("input", { type: "number", value: 32, min: 4, max: 128 }), hh = h("input", { type: "number", value: 40, min: 4, max: 128 });
+  const mode = h("select", {}, h("option", { value: "random" }, "random systems"), h("option", { value: "blank" }, "blank (build by hand)"));
+  const dens = h("input", { type: "number", value: 0.4, step: 0.05, min: 0.05, max: 1 });
+  const npol = h("input", { type: "number", value: 1, min: 0, max: 12 });
+  pane.replaceChildren(
+    h("h2", {}, "Map"),
+    h("div", { class: "row" }, h("button", { class: editMode ? "toggle on" : "toggle", onclick: () => setEditMode(!editMode) },
+      editMode ? "Editing map — done" : "Edit map"),
+      h("span", { class: "muted" }, editMode ? "Click an empty hex to add a system; click a system to edit it, its lanes, or connect it to shift-selected systems." : "Turn on to add, change or remove systems and lanes.")),
+    h("h3", {}, `Sectors (${secs.length})`),
+    ...secs.map(s => {
+      const nm = h("input", { value: s.name });
+      return h("div", { class: "card" },
+        h("div", { class: "row" }, nm, h("span", { class: "muted" }, `${count[s.id] || 0} systems · ${s.width}×${s.height}`)),
+        h("div", { class: "row" },
+          h("button", { onclick: () => map.centerOnSector(s.id) }, "Go to"),
+          h("button", { onclick: () => guard(() => applyEdit(`/api/sectors/${s.id}`, "PUT", { name: nm.value }, "Sector renamed")) }, "Rename"),
+          secs.length > 1 ? h("button", { class: "danger", onclick: ev => guard(async () => {
+            if (!confirmButton(ev.target)) return;
+            await applyEdit(`/api/sectors/${s.id}`, "DELETE", undefined, `${s.name} removed`);
+          }) }, "Delete sector") : null));
+    }),
+    h("h3", {}, "Add a sector"),
+    h("div", { class: "grid2" },
+      h("span", {}, "Name"), name,
+      h("span", {}, "Position"), h("span", {}, dir, " ", ref),
+      h("span", {}, "Size"), h("span", {}, w, " × ", hh, h("span", { class: "muted" }, " hexes")),
+      h("span", {}, "Contents"), mode,
+      h("span", {}, "Density"), dens,
+      h("span", {}, "New polities"), npol),
+    h("div", { class: "row" }, h("button", { class: "primary", onclick: () => guard(async () => {
+      if (!name.value) { toast("Give the sector a name", true); return; }
+      toast("Adding sector…");
+      const res = await applyEdit("/api/sectors", "POST", { name: name.value, adjacent: ref.value, direction: dir.value,
+        width: Number(w.value), height: Number(hh.value), mode: mode.value, density: Number(dens.value),
+        polities: mode.value === "random" ? Number(npol.value) : 0 }, `Sector ${name.value} added`);
+      map.centerOnSector(res.id);
+    }) }, "Add sector")),
+    h("p", { class: "muted" }, "Random sectors are linked to their neighbours by new lanes across the border; existing lanes never change. All sectors share one economy, so trade, smuggling and the party travel between them."),
+  );
 }
 
 async function refreshCampaign() {
@@ -104,6 +278,7 @@ function wireHeader() {
   $("#step1").onclick = () => step(1);
   $("#step4").onclick = () => step(4);
   $("#stepGo").onclick = () => step(Number($("#stepN").value) || 1);
+  $("#editBtn").onclick = () => setEditMode(!editMode);
   $("#saveBtn").onclick = () => {
     $("#savePath").value = camp?.path || `~/campaigns/${(camp?.name || "sector").replace(/[^\w.-]+/g, "_")}.hexchange.json`;
     $("#saveInfo").textContent = camp?.path
@@ -194,8 +369,14 @@ async function refreshOverlay() {
 
 // ------------------------------------------------------------------ system panel
 function onSelect(id, additive) {
-  if (additive) { renderEventsTargets(); toast(`${map.multi.size} systems in multi-selection`); return; }
-  selected = id; showTab("system"); showSystem(id); renderRoutesForm();
+  if (paintPolity !== undefined && !additive) {        // paint mode: clicking assigns the system
+    const pname = paintPolity ? camp.polities.find(p => p.id === paintPolity)?.name : "unaligned";
+    guard(() => applyEdit("/api/assign", "PUT", { systems: [id], polity: paintPolity }, `${map.byId[id].name} → ${pname}`));
+    return;
+  }
+  if (additive) { renderEventsTargets(); toast(`${map.multi.size} systems in multi-selection`); if (editMode && selected) showEditor(selected); return; }
+  selected = id; showTab("system"); renderRoutesForm();
+  if (editMode) showEditor(id); else showSystem(id);
 }
 
 async function showSystem(id) {
@@ -225,7 +406,7 @@ async function showSystem(id) {
   });
   const notes = h("textarea", {}, d.notes || "");
   pane.replaceChildren(
-    h("h2", {}, `${d.name} `, h("span", { class: "muted mono" }, `${d.id} · ${d.profile}`)),
+    h("h2", {}, `${d.name} `, h("span", { class: "muted mono" }, `${map.place(d.id)} · ${d.profile}`)),
     h("div", {}, pol ? h("span", { class: "pill", style: `border-color:${pol.color};color:${pol.color}` }, pol.name) : h("span", { class: "pill" }, "Unaligned"),
       ...d.codes.map(c => h("span", { class: "pill", title: codeName[c] || c }, codeName[c] || c)),
       ...d.events.map(e => h("span", { class: "pill warn" }, `event: ${e}`))),
@@ -264,6 +445,7 @@ async function showLane(id) {
   const ln = camp.lanes.find(l => l.id === id);
   if (!ln) return;
   showTab("system");
+  if (editMode) { $("#pane-system").replaceChildren(h("h2", {}, "Edit lane"), laneRow(ln)); return; }
   const flows = await api("/api/flows");
   const a = map.byId[ln.a], b = map.byId[ln.b];
   $("#pane-system").replaceChildren(
@@ -421,18 +603,54 @@ function renderPolitics() {
       renderPolitics(); if (selected) showSystem(selected);
       toast(`${p.name}: ${keyLabel(key)} ${value === null ? "rule removed" : lawLabel(value)}`);
     });
-    return h("div", { class: "card" },
+    const nm = h("input", { value: p.name, style: "width:180px" });
+    const col = h("input", { type: "color", value: p.color, style: "width:44px;padding:0" });
+    const reach = h("input", { type: "number", value: 4, min: 1, max: 40, style: "width:56px" });
+    const painting = paintPolity === p.id;
+    return h("div", { class: "card", style: painting ? "border-color:var(--warn)" : "" },
       h("span", { style: `color:${p.color}` }, "● "), h("strong", {}, p.name),
       h("span", { class: "muted" }, ` · ${count[p.id] || 0} systems · capital ${map.byId[p.capital]?.name || "–"}`),
+      h("div", { class: "row" }, nm, col,
+        h("button", { onclick: () => guard(() => applyEdit(`/api/polities/${p.id}`, "PUT", { name: nm.value, color: col.value }, "Polity updated")) }, "Save"),
+        h("button", { class: painting ? "toggle on" : "toggle", onclick: () => { paintPolity = painting ? undefined : p.id; renderPolitics();
+          toast(paintPolity ? `Paint mode: click systems to add them to ${p.name}` : "Paint mode off"); } }, painting ? "Painting — stop" : "Paint systems"),
+        h("button", { class: "danger", onclick: ev => guard(async () => {
+          if (!confirmButton(ev.target)) return;
+          if (paintPolity === p.id) paintPolity = undefined;
+          await applyEdit(`/api/polities/${p.id}`, "DELETE", undefined, `${p.name} dissolved; its systems are unaligned`);
+        }) }, "Delete")),
+      h("div", { class: "row" },
+        h("button", { disabled: !selected, onclick: () => guard(() => applyEdit(`/api/polities/${p.id}`, "PUT", { capital: selected }, `Capital set to ${map.byId[selected].name}`)) },
+          selected ? `Make ${map.byId[selected].name} capital` : "Select a system to make it capital"),
+        h("button", { disabled: !(map.multi.size || selected), onclick: () => guard(() => applyEdit("/api/assign", "PUT",
+          { systems: [...eventSystems()], polity: p.id }, `${eventSystems().size} systems assigned to ${p.name}`)) }, "Assign selected"),
+        "grow", reach, h("button", { onclick: () => guard(() => applyEdit(`/api/polities/${p.id}/grow`, "POST",
+          { reach: Number(reach.value) }, `${p.name} expanded`)) }, "Grow from capital")),
       h("div", { class: "row" }, ...Object.entries(p.legality || {}).map(([k, v]) =>
         h("span", { class: "pill" + (v === "legal" ? " on" : " warn"), style: "cursor:pointer", title: "click to remove",
           onclick: () => setLaw(k, null) }, `${keyLabel(k)}: ${lawLabel(v)} ✕`))),
       h("div", { class: "row" }, keySel, valSel, lawN, h("button", { onclick: () =>
         setLaw(keySel.value, valSel.value === "law" ? Number(lawN.value) : valSel.value) }, "Set law")));
   };
+  const newName = h("input", { placeholder: "new polity name" });
+  const newColor = h("input", { type: "color", value: "#d98c3f", style: "width:44px;padding:0" });
+  const unpaint = paintPolity === null;
   pane.replaceChildren(
     h("h2", {}, "Polities"),
-    h("p", { class: "muted" }, "Laws decide what is contraband in each polity. Banned goods can only arrive by smuggling. Unaligned systems use each good's default (law level)."),
+    h("p", { class: "muted" }, "Create and reshape political regions at any time. Border and law changes affect customs and contraband from the next week (laws immediately). Laws decide what is contraband in each polity; banned goods can only arrive by smuggling."),
+    h("div", { class: "card" },
+      h("strong", {}, "New polity"),
+      h("div", { class: "row" }, newName, newColor,
+        h("button", { class: "primary", onclick: () => guard(async () => {
+          if (!newName.value) { toast("Give the polity a name", true); return; }
+          const res = await applyEdit("/api/polities", "POST", { name: newName.value, color: newColor.value, capital: selected || null },
+            `${newName.value} founded${selected ? " at " + map.byId[selected].name : ""}`);
+          paintPolity = res.id; renderPolitics();
+          toast(`Paint mode: click systems to add them to ${res.name}`);
+        }) }, selected ? `Found at ${map.byId[selected].name}` : "Create")),
+      h("div", { class: "muted" }, "Select a system first to make it the capital. After creating, click systems on the map to paint them in.")),
+    h("div", { class: "row" }, h("button", { class: unpaint ? "toggle on" : "toggle", onclick: () => { paintPolity = unpaint ? undefined : null; renderPolitics(); } },
+      unpaint ? "Painting unaligned — stop" : "Paint systems unaligned")),
     ...pol.map(lawCard),
     h("p", { class: "muted" }, `${count[null] || count[undefined] || 0} unaligned systems.`),
     h("h3", {}, "Relations (−1 hostile … +1 allied)"),

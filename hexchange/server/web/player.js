@@ -1,4 +1,4 @@
-import { HexMap, api, fmt, priceColor } from "/static/map.js?v=8";
+import { HexMap, api, fmt, priceColor } from "/static/map.js?v=12";
 
 const $ = s => document.querySelector(s);
 const h = (tag, attrs = {}, ...kids) => {
@@ -22,7 +22,7 @@ async function load() {
   map.setParty(camp.party);
   map.fitTo([...camp.systems.map(s => s.id), ...(camp.unknown || []).map(u => u.id)]);   // zoom to what is known
   const here = camp.party && map.byId[camp.party];
-  $("#where").textContent = here ? `◆ Party at ${here.name} (${here.id})` : "";
+  $("#where").textContent = here ? `◆ Party at ${here.name} (${map.place(here.id)})` : "";
   overlay();
   if (!camp.systems.length)
     $("#pane").replaceChildren(h("p", { class: "muted" }, "Your GM hasn't revealed any systems yet."));
@@ -52,7 +52,7 @@ async function overlay() {
 async function showSystem(id) {
   const s = map.byId[id];
   const pane = $("#pane");
-  const head = h("h2", {}, `${s.name} `, h("span", { class: "muted mono" }, `${s.id} · ${s.profile}`));
+  const head = h("h2", {}, `${s.name} `, h("span", { class: "muted mono" }, `${map.place(s.id)} · ${s.profile}`));
   const d = await api(`/api/player/system/${id}`);
   const cur = camp.setting.currency, tu = camp.setting.time_unit;
   const k = d.known;

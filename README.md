@@ -106,6 +106,29 @@ Each tick is one week.
    from week to week. After a war, embargo or boom, price gaps open and close over several
    weeks, diffusing in time as well as across the map. That window is what players exploit.
 
+### Building and editing the galaxy
+
+The GM can change the map at any time, including mid-campaign:
+- **Edit map** (header button or the **Map** tab):
+  - click an empty hex to add a system (blank attributes are rolled with the setting's dice,
+    and codes are worked out automatically);
+  - click a system to edit, reroll or delete it, or to connect it to shift-selected systems;
+  - click a lane to change its capacity, risk or toll, or delete it.
+  - **Auto-lane** links systems to their neighbours the way the generator does.
+- **Sectors:** a galaxy is a patchwork of sectors on one hex grid. Add a sector north,
+  south, east or west of another, either random (new lanes join it to its neighbours across
+  the border, existing lanes never change, optionally with new polities) or blank to build
+  by hand. All sectors share one economy, so trade, smuggling, route finding and the party
+  move freely between them.
+- **Political regions:** in the Politics tab you can found a polity (with the selected system
+  as capital), rename and recolour it, change its capital, **paint** systems into it by
+  clicking the map, assign selected systems, grow it outward from its capital, or dissolve
+  it.
+
+Edits keep everything else intact: existing systems keep their prices, stocks and history,
+and references to removed systems (events, party, player knowledge) are cleaned up. The same
+operations are available to code in `hexchange.edit` (call `sim.rebuild()` afterwards).
+
 ### Laws and contraband
 
 Each good can have a default law-level threshold (`illegal_above_law`). Each polity can
@@ -141,6 +164,13 @@ events (the setting's presets) can be switched on per campaign.
 
 JSON Schemas are in `schemas/`. Files carry a `schema_version`, and newer versions are
 rejected rather than misread.
+
+### Performance
+
+One simulated week takes about 1.7 s for a two-sector Traveller galaxy (1,072 systems, 27
+goods) and about 0.65 s for a four-sector generic galaxy (2,135 systems, 12 goods), measured
+on this machine's CPU. Weeks just after a sector is added run slower while the new trade
+settles.
 
 ## Tests
 

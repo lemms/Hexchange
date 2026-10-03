@@ -82,6 +82,9 @@ class Simulation:
     def _build(self) -> None:
         c, s = self.camp, self.camp.setting
         self.ix = ev_mod.Index(c)
+        self.sys_ids = [x.id for x in c.systems]
+        self.lane_ids = [ln.id for ln in c.lanes]
+        self.__dict__.pop("_off_index", None)
         self.N, self.G, self.E = len(c.systems), len(s.goods), len(c.lanes)
         roles = s.roles
         pop = np.array([float(x.attrs.get(roles.population, 0) or 0) for x in c.systems])
@@ -240,6 +243,59 @@ class Simulation:
         # stored rounded, and used rounded, so a reloaded campaign continues identically
         self.share = np.round(sh / sh.sum(1, keepdims=True), 6)
         self.camp.state.lane_shares = self.share.tolist()
+
+    def rebuild(self) -> None:
+        """Re-read the campaign after the GM edited systems, lanes or polities.
+
+        Market state is carried over by system id (prices, stocks, history) and lane
+        state by lane id, so nothing that still exists changes; new systems start
+        at base prices with two weeks of stock."""
+        st = self.camp.state
+        old_sys, old_lanes = self.sys_ids, self.lane_ids
+        m = st.market
+        old: dict[str, np.ndarray] = {}
+        if m is not None:
+            for name in ("price", "stock", "input_stock", "supply", "demand"):
+                a = np.array(getattr(m, name), float)
+                if a.size:
+                    old[name] = a.reshape(len(old_sys), -1)
+        old_shares = np.array(st.lane_shares, float)
+        self._build()
+        G = self.G
+        where = {sid: i for i, sid in enumerate(old_sys)}
+        keep = np.array([where.get(sid, -1) for sid in self.sys_ids])
+        fresh = keep < 0
+        init = {"price": np.tile(self.pref, (self.N, 1)), "stock": 2.0 * (self.K + self.D0),
+                "input_stock": INPUT_WEEKS * (self.K @ self.recipe), "supply": self.K, "demand": self.D0}
+        arrays = {}
+        for name, start in init.items():
+            a = start.copy()
+            if name in old:
+                a[~fresh] = old[name][keep[~fresh]]
+            arrays[name] = a
+        st.market = MarketState(price=arrays["price"].round(4).tolist(), stock=arrays["stock"].round(3).tolist(),
+                                input_stock=arrays["input_stock"].round(3).tolist(),
+                                supply=arrays["supply"].round(3).tolist(), demand=arrays["demand"].round(3).tolist())
+        # lanes: shares and flows by id
+        lw = {lid: e for e, lid in enumerate(old_lanes)}
+        share = np.full((self.E, G), 1.0 / max(1, G))
+        if old_shares.shape == (len(old_lanes), G):
+            for e, lid in enumerate(self.lane_ids):
+                if lid in lw:
+                    share[e] = old_shares[lw[lid]]
+        self.share = share
+        st.lane_shares = share.tolist()
+        lanes = set(self.lane_ids)
+        st.flows = [f for f in st.flows if f.lane in lanes]
+        ids = set(self.sys_ids)
+        st.smuggling = [f for f in st.smuggling if all(x in ids for x in f.lane.split("~"))]
+        # price history: remap each recorded week to the new system order
+        for gid, weeks in st.history.items():
+            k = self.ix.good.get(gid)
+            base = float(self.pref[k]) if k is not None else 0.0
+            st.history[gid] = [[w[where[sid]] if sid in where and where[sid] < len(w) else base
+                                for sid in self.sys_ids] for w in weeks]
+        self.refresh_legality()
 
     def _init_state(self) -> None:
         Y = self.K.copy()

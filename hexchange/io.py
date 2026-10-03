@@ -81,6 +81,12 @@ def _migrate(data: dict) -> dict:
         for ev in data.get("events", []):
             if ev.get("source") == "dm":
                 ev["source"] = "gm"
+    if v < 3 and data.get("format") == "hexchange-campaign":   # v3: sectors
+        if not data.get("sectors"):
+            data["sectors"] = [{"id": "S1", "name": data.get("name", "Sector 1"), "col0": 0, "row0": 0,
+                                "width": data["width"], "height": data["height"]}]
+            for s in data.get("systems", []):
+                s.setdefault("sector", "S1")
     data["schema_version"] = SCHEMA_VERSION
     return data
 

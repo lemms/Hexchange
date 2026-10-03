@@ -8,7 +8,7 @@ import re
 from collections import deque
 
 from . import hexgrid, lanes as lanegen
-from .model import (AttributeDef, Campaign, Condition, Options, Polity, Setting, StarSystem,
+from .model import (AttributeDef, Campaign, Condition, Options, Polity, Sector, Setting, StarSystem,
                     relation_key)
 
 _DICE = re.compile(r"^\s*(\d+)\s*d\s*(\d+)\s*([+-]\s*\d+)?\s*$")
@@ -200,6 +200,7 @@ def generate(setting: Setting, *, name: str = "New Sector", width: int = 32, hei
             systems.append(StarSystem(id=hexgrid.label(col, row), name=make_name(setting, rng, used),
                                       col=col, row=row, attrs=attrs, codes=classify(setting, attrs)))
     camp = Campaign(name=name, width=width, height=height, setting=setting, systems=systems,
+                    sectors=[Sector(id="S1", name=name, width=width, height=height)],
                     options=Options(seed=seed))
     camp.lanes = lanegen.build_lanes(camp, rng)
     assign_polities(camp, polities, rng)

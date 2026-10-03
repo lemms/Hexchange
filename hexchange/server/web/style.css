@@ -29,6 +29,8 @@ main { display: grid; grid-template-columns: 1fr 560px; min-height: 0; }
 #overlay { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; flex-wrap: wrap;
            background: rgba(19,24,36,.88); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
 aside { background: var(--panel); border-left: 1px solid var(--line); display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+aside > div:last-child { min-height: 0; overflow: hidden; }       /* panes scroll inside, the page never does */
+aside .pane.on { height: 100%; }
 .tabs { display: flex; border-bottom: 1px solid var(--line); }
 .tabs button { flex: 1; min-width: 0; background: none; border: 0; color: var(--muted); padding: 9px 4px; cursor: pointer; border-bottom: 2px solid transparent; }
 .tabs button.on { color: var(--fg); border-bottom-color: var(--accent); }
@@ -69,6 +71,12 @@ dialog::backdrop { background: rgba(0,0,0,.55); }
 svg text { pointer-events: none; user-select: none; }
 .hex { fill: none; stroke: #1b2232; stroke-width: 0.6; }
 .lane { stroke: var(--lane); stroke-linecap: round; }
+.sectorbox { fill: none; stroke: #3a4763; stroke-width: 1.2; stroke-dasharray: 6 3; pointer-events: none; }
+.sectorname { fill: #6d7c99; font-size: 9px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+svg.editing .hex { pointer-events: all; fill: transparent; cursor: crosshair; }
+svg.editing .hex:hover { fill: rgba(108, 178, 255, .18); }
+.hex.pick { fill: rgba(245, 195, 91, .3) !important; }
+button.toggle.on { background: #5a3f0c; border-color: var(--warn); color: var(--warn); }
 .lane.sel { stroke: var(--warn) !important; }
 .party { fill: none; stroke: #f5c35b; stroke-width: 1.6; stroke-dasharray: 3 1.5; }
 .partylabel { fill: #f5c35b; font-size: 5px; text-anchor: middle; font-weight: 600; }

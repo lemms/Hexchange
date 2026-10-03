@@ -34,29 +34,50 @@ export function priceColor(ratio) {
 }
 
 export class HexMap {
-  constructor(svg, { onSelect, onLane } = {}) {
-    this.svg = svg; this.onSelect = onSelect; this.onLane = onLane;
+  constructor(svg, { onSelect, onLane, onHex } = {}) {
+    this.svg = svg; this.onSelect = onSelect; this.onLane = onLane; this.onHex = onHex;
+    this.editMode = false;
     this.view = { x: 0, y: 0, w: 100, h: 100 };
     this.selected = null; this.multi = new Set(); this.selLane = null;
     this.layers = {};
-    for (const name of ["hex", "smug", "lanes", "path", "unk", "party", "sys", "labels"]) this.layers[name] = el("g", {}, svg);
+    for (const name of ["hex", "sectors", "smug", "lanes", "path", "unk", "party", "sys", "labels"]) this.layers[name] = el("g", {}, svg);
+    this.layers.hex.addEventListener("click", e => {           // edit mode: click an empty hex
+      const p = e.target.closest("polygon.hex");
+      if (p && this.editMode) this.onHex?.(Number(p.dataset.col), Number(p.dataset.row));
+    });
     this._interact();
   }
 
-  load(data) {
+  setEditMode(on) {
+    this.editMode = on;
+    this.svg.classList.toggle("editing", on);
+  }
+
+  load(data, { keepView = false } = {}) {
+    const prevView = keepView && this.data ? { ...this.view } : null;
     this.data = data;
     this.byId = Object.fromEntries([...(data.unknown || []).map(u => [u.id, { ...u, unknown: true }]),
                                     ...data.systems.map(s => [s.id, s])]);
     this.polity = Object.fromEntries(data.polities.map(p => [p.id, p]));
     const W = R * 1.5 * data.width + R * 1.5, H = R * SQ3 * (data.height + 0.5) + R;
     this.bounds = { w: W, h: H };
-    this.view = { x: -R, y: -R, w: W + 2 * R, h: H + 2 * R };
+    this.view = prevView || { x: -R, y: -R, w: W + 2 * R, h: H + 2 * R };
     for (const g of Object.values(this.layers)) g.replaceChildren();
-    // grid
+    // grid, drawn sector by sector (the galaxy can be an irregular patchwork)
+    const sectors = data.sectors && data.sectors.length ? data.sectors
+      : [{ id: "S1", name: "", col0: 0, row0: 0, width: data.width, height: data.height }];
+    this.sectors = sectors;
     const frag = document.createDocumentFragment();
-    for (let c = 0; c < data.width; c++) for (let r = 0; r < data.height; r++) {
-      const [x, y] = hexCenter(c, r);
-      el("polygon", { points: hexPoints(x, y), class: "hex" }, frag);
+    for (const s of sectors) {
+      for (let c = s.col0; c < s.col0 + s.width; c++) for (let r = s.row0; r < s.row0 + s.height; r++) {
+        const [x, y] = hexCenter(c, r);
+        el("polygon", { points: hexPoints(x, y), class: "hex", "data-col": c, "data-row": r }, frag);
+      }
+      const [x0, y0] = hexCenter(s.col0, s.row0), [x1, y1] = hexCenter(s.col0 + s.width - 1, s.row0 + s.height - 1);
+      el("rect", { x: x0 - R, y: y0 - R * SQ3 / 2, width: x1 - x0 + 2 * R, height: y1 - y0 + R * SQ3 * 1.5,
+                   class: "sectorbox" }, this.layers.sectors);
+      const t = el("text", { x: x0 - R + 4, y: y0 - R * SQ3 / 2 - 4, class: "sectorname" }, this.layers.sectors);
+      t.textContent = s.name;
     }
     this.layers.hex.appendChild(frag);
     // lanes
@@ -84,14 +105,22 @@ export class HexMap {
       const pop = Number(s.attrs[popKey] ?? 5);
       const c = el("circle", { cx: x, cy: y, r: (2 + pop * 0.35).toFixed(2), class: "sys" }, this.layers.sys);
       c.addEventListener("click", e => { e.stopPropagation(); this.select(s.id, e.shiftKey); });
-      const t = el("title", {}, c); t.textContent = `${s.name} ${s.id} ${s.profile}`;
       this.sysEls[s.id] = c;
+      el("title", {}, c).textContent = `${s.name} ${s.id} · ${this.place(s.id)} ${s.profile}`;
       const lab = el("text", { x, y: y + R * 0.78, class: "label" }, this.layers.labels);
       lab.textContent = s.name;
       if (s.visible === false) c.classList.add("hidden");
     }
     this.colorByPolity();
     this._apply();
+  }
+
+  place(id) {
+    // "Sector 0304" in multi-sector galaxies, plain "0304" otherwise
+    const s = this.byId[id];
+    if (!s) return id;
+    const sec = (this.sectors || []).find(x => x.id === s.sector);
+    return (this.sectors || []).length > 1 && sec ? `${sec.name} ${s.label || s.id}` : (s.label || s.id);
   }
 
   setParty(id) {
@@ -159,16 +188,17 @@ export class HexMap {
     el("polyline", { points: pts, class: "path" }, this.layers.path);
   }
 
-  select(id, additive = false) {
+  select(id, additive = false, { silent = false } = {}) {
+    // silent: restore a highlight (e.g. after reloading the map) without acting on it
     if (additive) {
       this.multi.has(id) ? this.multi.delete(id) : this.multi.add(id);
-      this.sysEls[id].classList.toggle("multi", this.multi.has(id));
+      this.sysEls[id]?.classList.toggle("multi", this.multi.has(id));
     } else {
       if (this.selected) this.sysEls[this.selected]?.classList.remove("sel");
       this.selected = id;
       this.sysEls[id]?.classList.add("sel");
     }
-    this.onSelect?.(id, additive);
+    if (!silent) this.onSelect?.(id, additive);
   }
 
   clearMulti() {
@@ -194,6 +224,17 @@ export class HexMap {
     if (w / h < aspect) w = h * aspect; else h = w / aspect;      // keep the screen's aspect ratio
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     this.view = { x: cx - w / 2, y: cy - h / 2, w, h };
+    this._apply();
+  }
+
+  centerOnSector(sid) {
+    const s = (this.sectors || []).find(x => x.id === sid);
+    if (!s) return;
+    const [x0, y0] = hexCenter(s.col0, s.row0), [x1, y1] = hexCenter(s.col0 + s.width - 1, s.row0 + s.height - 1);
+    const pad = 2 * R, r = this.svg.getBoundingClientRect(), aspect = (r.width || 4) / (r.height || 3);
+    let w = x1 - x0 + 2 * pad, h = y1 - y0 + 2 * pad;
+    if (w / h < aspect) w = h * aspect; else h = w / aspect;
+    this.view = { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h };
     this._apply();
   }
 

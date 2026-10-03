@@ -142,3 +142,56 @@ def test_party_location_and_market_knowledge(client):
     # revealing systems does not clear location/knowledge
     client.put("/api/player_view", json={"visible_systems": [], "show_flows": False})
     assert client.get("/api/player/campaign").json()["party"] == b
+
+
+def test_editor_endpoints(client):
+    camp = client.post("/api/generate", json={"setting": "generic", "width": 12, "height": 12, "seed": 2,
+                                              "warmup": 2, "polities": 2}).json()
+    assert [s["id"] for s in camp["sectors"]] == ["S1"]
+    r = client.post("/api/sectors", json={"name": "East", "adjacent": "S1", "direction": "E",
+                                          "width": 12, "height": 12, "polities": 1})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert {s["name"] for s in data["sectors"]} == {camp["name"], "East"}
+    east = data["result"]["id"]
+    # add a system on an empty hex of a new blank sector, then connect it
+    r = client.post("/api/sectors", json={"name": "Void", "adjacent": "S1", "direction": "S", "width": 12,
+                                          "height": 12, "mode": "blank"})
+    void = r.json()["result"]
+    sys_ = client.post("/api/systems", json={"col": void["col0"] + 1, "row": void["row0"] + 1, "name": "Lonely",
+                                             "attrs": {"port": "A"}}).json()
+    new_id = sys_["result"]["id"]
+    assert sys_["result"]["attrs"]["port"] == "A" and new_id.startswith(void["id"])
+    assert client.post("/api/systems", json={"col": void["col0"] + 1, "row": void["row0"] + 1}).status_code == 400
+    other = next(s["id"] for s in camp["systems"])
+    lane = client.post("/api/lanes", json={"a": new_id, "b": other}).json()["result"]
+    assert client.put(f"/api/lanes/{lane['id']}", json={"capacity": 50}).json()["result"]["capacity"] == 50
+    assert client.delete(f"/api/lanes/{lane['id']}").status_code == 200
+    assert client.put(f"/api/systems/{new_id}", json={"attrs": {"pop": 9}}).json()["result"]["attrs"]["pop"] == 9
+    assert client.post(f"/api/systems/{new_id}/reroll").status_code == 200
+    # polities
+    p = client.post("/api/polities", json={"name": "Lonely League", "color": "#112233", "capital": new_id}).json()["result"]
+    assert client.put("/api/assign", json={"systems": [other], "polity": p["id"]}).status_code == 200
+    m = client.get("/api/campaign").json()
+    assert next(s for s in m["systems"] if s["id"] == other)["polity"] == p["id"]
+    assert client.post(f"/api/polities/{p['id']}/grow", json={"reach": 3}).status_code == 200
+    assert client.put(f"/api/polities/{p['id']}", json={"name": "LL"}).json()["result"]["name"] == "LL"
+    assert client.delete(f"/api/polities/{p['id']}").status_code == 200
+    assert client.delete(f"/api/systems/{new_id}").status_code == 200
+    assert client.delete(f"/api/sectors/{east}").status_code == 200
+    assert client.delete("/api/sectors/nope").status_code == 400
+    # the economy still runs after all that
+    client.post("/api/step", json={"weeks": 1})
+    s = _wait(client)
+    assert s["error"] is None and s["tick"] >= 1
+    # edits are refused while a run is in progress
+    client.post("/api/step", json={"weeks": 30})
+    assert client.post("/api/polities", json={"name": "Too Late"}).status_code in (200, 409)
+    _wait(client)
+
+
+def test_player_sees_only_known_sectors(client):
+    client.post("/api/generate", json={"setting": "generic", "width": 12, "height": 12, "seed": 2, "warmup": 2})
+    client.post("/api/sectors", json={"name": "Hidden Reach", "adjacent": "S1", "direction": "E", "width": 12, "height": 12})
+    r = client.get("/api/player/campaign")
+    assert r.json()["sectors"] == [] and "Hidden Reach" not in r.text

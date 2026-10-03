@@ -363,4 +363,5 @@ def test_old_campaigns_migrate_dm_to_gm(setting, tmp_path):
     data["events"] = [{"id": "e", "type": "boom", "name": "Boom", "start": 0, "source": "dm"}]
     (tmp_path / "old.hexchange.json").write_text(json.dumps(data))
     back = hx.load_campaign(tmp_path / "old.hexchange.json")
-    assert back.events[0].source == "gm" and back.schema_version == 2
+    assert back.events[0].source == "gm" and back.schema_version == hx.model.SCHEMA_VERSION
+    assert [s.id for s in back.sectors] == ["S1"] and all(x.sector == "S1" for x in back.systems)

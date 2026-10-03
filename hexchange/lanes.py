@@ -17,8 +17,6 @@ from __future__ import annotations
 import random
 
 import numpy as np
-from scipy.sparse import coo_matrix
-from scipy.sparse.csgraph import minimum_spanning_tree
 from scipy.spatial import Delaunay
 
 from . import hexgrid
@@ -83,36 +81,79 @@ def _rng_edges(points: np.ndarray, idx: list[int]) -> set[tuple[int, int]]:
     return out
 
 
-def build_lanes(camp: Campaign, rng: random.Random) -> list[Lane]:
+def make_lane(camp: Campaign, a_id: str, b_id: str, length: int | None = None) -> Lane:
+    """A lane with capacity and risk from the setting's ports and lane parameters."""
+    s = camp.setting
+    p = s.lanes
+    by = {x.id: x for x in camp.systems}
+    a, b = by[a_id], by[b_id]
+    if length is None:
+        length = hexgrid.distance((a.col, a.row), (b.col, b.row))
+    pa = s.ports.get(str(a.attrs.get(s.roles.port)))
+    pb = s.ports.get(str(b.attrs.get(s.roles.port)))
+    cap = min(pa.capacity if pa else 0.0, pb.capacity if pb else 0.0)
+    return Lane(id=lane_id(a.id, b.id), a=a.id, b=b.id, length=int(length),
+                capacity=round(p.base_capacity * s.volume_scale * max(cap, 0.1), 1),
+                risk=round(p.lane_risk * length, 4))
+
+
+def build_lanes(camp: Campaign, rng: random.Random, only: set[str] | None = None) -> list[Lane]:
+    """New lanes for the campaign.
+
+    With ``only`` (system ids), existing lanes are kept fixed: systems they already
+    connect count as joined, and every new lane touches at least one system in
+    ``only`` -- used when adding a sector or systems to a running galaxy.
+    Returns the new lanes only.
+    """
     s = camp.setting
     p = s.lanes
     eligible = [i for i, sy in enumerate(camp.systems)
                 if (pc := s.ports.get(str(sy.attrs.get(s.roles.port)))) is not None and pc.lanes]
     if len(eligible) < 2:
         return []
+    ids = [x.id for x in camp.systems]
+    pos = {sid: i for i, sid in enumerate(ids)}
+    focus = None if only is None else {pos[x] for x in only if x in pos}
     imp = importance(camp)
-    cands = candidate_pairs(camp, eligible, p.max_jump)
+    cands = [c for c in candidate_pairs(camp, eligible, p.max_jump)
+             if focus is None or c[0] in focus or c[1] in focus]
     if not cands:
         return []
     n = len(camp.systems)
     length = {(i, j): d for i, j, d in cands}
-    # backbone: minimum spanning forest, cheaper between important systems
-    rows = [i for i, _, _ in cands]
-    cols = [j for _, j, _ in cands]
-    w = [d / (0.5 + (imp[camp.systems[i].id] * imp[camp.systems[j].id]) ** 0.25) for i, j, d in cands]
-    mst = minimum_spanning_tree(coo_matrix((w, (rows, cols)), shape=(n, n)).tocsr()).tocoo()
-    chosen = {tuple(sorted((int(i), int(j)))) for i, j in zip(mst.row, mst.col)}
+    existing = {tuple(sorted((pos[ln.a], pos[ln.b]))) for ln in camp.lanes if ln.a in pos and ln.b in pos}
+
+    # backbone: Kruskal minimum spanning forest, cheaper between important systems,
+    # starting from the components the existing lanes already form
+    parent = list(range(n))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i, j in existing:
+        parent[find(i)] = find(j)
+    weight = {(i, j): d / (0.5 + (imp[ids[i]] * imp[ids[j]]) ** 0.25) for i, j, d in cands}
+    chosen: set[tuple[int, int]] = set()
+    for (i, j) in sorted(weight, key=lambda e: (weight[e], e)):
+        ri, rj = find(i), find(j)
+        if ri != rj and (i, j) not in existing:
+            parent[ri] = rj
+            chosen.add((i, j))
     degree = {i: 0 for i in range(n)}
-    for i, j in chosen:
+    for i, j in chosen | existing:
         degree[i] += 1
         degree[j] += 1
 
     # extra lanes from the relative neighbourhood graph, by gravity
     pts = np.array([hexgrid.center(camp.systems[i].col, camp.systems[i].row) for i in eligible])
-    extra = [e for e in _rng_edges(pts, eligible) if e in length and e not in chosen]
-    grav = {e: imp[camp.systems[e[0]].id] * imp[camp.systems[e[1]].id] / length[e] ** 2 for e in extra}
+    extra = [e for e in _rng_edges(pts, eligible)
+             if e in length and e not in chosen and e not in existing]
+    grav = {e: imp[ids[e[0]]] * imp[ids[e[1]]] / length[e] ** 2 for e in extra}
     med = float(np.median(list(grav.values()))) if grav else 1.0
-    for e in sorted(extra, key=lambda e: -grav[e]):
+    for e in sorted(extra, key=lambda e: (-grav[e], e)):
         i, j = e
         if degree[i] >= p.max_degree or degree[j] >= p.max_degree:
             continue
@@ -122,13 +163,4 @@ def build_lanes(camp: Campaign, rng: random.Random) -> list[Lane]:
             degree[i] += 1
             degree[j] += 1
 
-    out = []
-    for i, j in sorted(chosen):
-        a, b = camp.systems[i], camp.systems[j]
-        pa = s.ports[str(a.attrs[s.roles.port])]
-        pb = s.ports[str(b.attrs[s.roles.port])]
-        d = length[(i, j)]
-        out.append(Lane(id=lane_id(a.id, b.id), a=a.id, b=b.id, length=d,
-                        capacity=round(p.base_capacity * s.volume_scale * min(pa.capacity, pb.capacity), 1),
-                        risk=round(p.lane_risk * d, 4)))
-    return out
+    return [make_lane(camp, ids[i], ids[j], length[(i, j)]) for i, j in sorted(chosen)]

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Hexchange</title>
-<link rel="stylesheet" href="/static/style.css?v=8">
+<link rel="stylesheet" href="/static/style.css?v=12">
 <script>
   // report script errors and basic diagnostics to the server log
   (function () {
@@ -27,6 +27,7 @@
   <button id="step1" title="Advance one week">+1 wk</button>
   <button id="step4">+4 wk</button>
   <input id="stepN" type="number" min="1" max="520" value="12"><button id="stepGo">Run</button>
+  <button id="editBtn" class="toggle" title="Add, change and remove systems, lanes and sectors">Edit map</button>
   <button id="saveBtn">Save</button>
   <button id="loadBtn">Load…</button>
   <button id="genBtn" class="primary">New sector…</button>
@@ -50,6 +51,7 @@
       <button data-tab="events">Events</button>
       <button data-tab="routes">Routes</button>
       <button data-tab="politics">Politics</button>
+      <button data-tab="map">Map</button>
       <button data-tab="players">Players</button>
     </div>
     <div>
@@ -57,6 +59,7 @@
       <section class="pane" id="pane-events"></section>
       <section class="pane" id="pane-routes"></section>
       <section class="pane" id="pane-politics"></section>
+      <section class="pane" id="pane-map"></section>
       <section class="pane" id="pane-players"></section>
     </div>
   </aside>
@@ -108,6 +111,6 @@
 </dialog>
 
 <div class="toast" id="toast"></div>
-<script type="module" src="/static/app.js?v=9"></script>
+<script type="module" src="/static/app.js?v=12"></script>
 </body>
 </html>

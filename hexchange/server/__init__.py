@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from .. import edit as ed
 from .. import io as hio
 from ..economy import Simulation
 from ..events import EVENT_HELP
@@ -65,6 +66,11 @@ class State:
             hio.save_campaign(self.sim.camp, self.path)
 
 
+def _label(camp: Campaign, x) -> str:
+    sec = next((s for s in camp.sectors if s.id == x.sector), None)
+    return sec.label(x.col, x.row) if sec else x.id
+
+
 def player_known(camp: Campaign) -> set[str]:
     """Systems that exist for the players: revealed by the GM, the party's location,
     and anywhere they hold market data for."""
@@ -107,15 +113,18 @@ def _map_payload(sim: Simulation, player: bool = False) -> dict[str, Any]:
         "setting": {
             "name": s.name, "currency": s.currency, "distance_unit": s.distance_unit, "time_unit": s.time_unit,
             "profile": s.profile, "disclaimer": s.disclaimer,
-            "attributes": [{"key": a.key, "name": a.name, "kind": a.kind, "values": a.values,
-                            "descriptions": a.descriptions} for a in s.attributes],
+            "attributes": [{"key": a.key, "name": a.name, "kind": a.kind, "values": a.values, "min": a.min,
+                            "max": a.max, "descriptions": a.descriptions} for a in s.attributes],
             "codes": [{"code": x.code, "name": x.name} for x in s.codes],
             "goods": [{"id": g.id, "name": g.name, "category": g.category, "tags": g.tags,
                        "base_price": g.base_price, "tons_per_unit": g.tons_per_unit} for g in s.goods],
             "max_jump": s.lanes.max_jump,
             "roles": s.roles.model_dump(),
         },
+        "sectors": [sec.model_dump() for sec in c.sectors
+                    if not player or any(x.sector == sec.id for x in systems)],
         "systems": [{"id": x.id, "name": x.name, "col": x.col, "row": x.row, "profile": profile(s, x.attrs),
+                     "sector": x.sector, "label": _label(c, x),
                      "attrs": x.attrs, "codes": x.codes, "polity": x.polity, "visible": True,
                      "here": x.id == pv.location,
                      "known_tick": pv.knowledge[x.id].tick if x.id in pv.knowledge else None,
@@ -467,6 +476,103 @@ def create_app(campaign_path: str | None = None, settings_dirs: list[str] | None
             return {"id": x.id, "name": x.name, "profile": profile(sim.camp.setting, x.attrs), "codes": x.codes,
                     "polity": x.polity, "here": sid == sim.camp.player_view.location,
                     "known": _known_market(sim, sid), "tick": sim.camp.state.tick}
+
+    # ------------------------------------------------------------ GM map & politics editor
+    def editing(fn):
+        """Run an edit under the lock, rebuild the economy, autosave, return the new map."""
+        with st.lock:
+            sim = st.need()
+            if st.job["running"]:
+                raise HTTPException(409, "the simulation is running; edit when it has finished")
+            try:
+                result = fn(sim.camp)
+            except ed.EditError as e:
+                raise HTTPException(400, str(e))
+            Campaign.model_validate(sim.camp.model_dump())      # never save an invalid galaxy
+            sim.rebuild()
+            st.save()
+            out = _map_payload(sim) | {"path": str(st.path) if st.path else None}
+            if result is not None and hasattr(result, "model_dump"):
+                out["result"] = result.model_dump()
+            elif isinstance(result, list):
+                out["result"] = [r.model_dump() if hasattr(r, "model_dump") else r for r in result]
+            return out
+
+    @app.post("/api/sectors")
+    def add_sector(name: str = Body(...), adjacent: str | None = Body(None), direction: str = Body("E"),
+                   col0: int | None = Body(None), row0: int | None = Body(None), width: int = Body(32, ge=4, le=128),
+                   height: int = Body(40, ge=4, le=128), mode: str = Body("random"), density: float = Body(0.4, gt=0, le=1),
+                   polities: int = Body(0, ge=0, le=12), seed: int | None = Body(None)):
+        at = (col0, row0) if col0 is not None and row0 is not None else None
+        return editing(lambda c: ed.add_sector(c, name, adjacent=(adjacent, direction) if adjacent else None, at=at,
+                                               width=width, height=height, mode=mode, density=density,
+                                               polities=polities, seed=seed))
+
+    @app.put("/api/sectors/{sid}")
+    def update_sector(sid: str, name: str | None = Body(None), notes: str | None = Body(None)):
+        return editing(lambda c: ed.update_sector(c, sid, name, notes))
+
+    @app.delete("/api/sectors/{sid}")
+    def remove_sector(sid: str):
+        return editing(lambda c: ed.remove_sector(c, sid))
+
+    @app.post("/api/systems")
+    def add_system(col: int = Body(...), row: int = Body(...), name: str | None = Body(None),
+                   attrs: dict | None = Body(None)):
+        return editing(lambda c: ed.add_system(c, col, row, name=name, attrs=attrs))
+
+    @app.put("/api/systems/{sid}")
+    def update_system(sid: str, name: str | None = Body(None), attrs: dict | None = Body(None),
+                      notes: str | None = Body(None)):
+        return editing(lambda c: ed.update_system(c, sid, name=name, attrs=attrs, notes=notes))
+
+    @app.post("/api/systems/{sid}/reroll")
+    def reroll_system(sid: str):
+        return editing(lambda c: ed.reroll_system(c, sid))
+
+    @app.delete("/api/systems/{sid}")
+    def remove_system(sid: str):
+        return editing(lambda c: ed.remove_system(c, sid))
+
+    @app.post("/api/lanes")
+    def add_lane(a: str = Body(...), b: str = Body(...), capacity: float | None = Body(None),
+                 risk: float | None = Body(None), toll: float | None = Body(None)):
+        return editing(lambda c: ed.add_lane(c, a, b, capacity=capacity, risk=risk, toll=toll))
+
+    @app.put("/api/lanes/{lid}")
+    def update_lane(lid: str, capacity: float | None = Body(None), risk: float | None = Body(None),
+                    toll: float | None = Body(None)):
+        return editing(lambda c: ed.update_lane(c, lid, capacity=capacity, risk=risk, toll=toll))
+
+    @app.delete("/api/lanes/{lid}")
+    def remove_lane(lid: str):
+        return editing(lambda c: ed.remove_lane(c, lid))
+
+    @app.post("/api/lanes/auto")
+    def auto_lanes(systems: list[str] = Body(..., embed=True)):
+        return editing(lambda c: ed.auto_lanes(c, systems))
+
+    @app.post("/api/polities")
+    def add_polity(name: str = Body(...), color: str | None = Body(None), capital: str | None = Body(None)):
+        return editing(lambda c: ed.add_polity(c, name, color=color, capital=capital))
+
+    @app.put("/api/polities/{pid}")
+    def update_polity(pid: str, name: str | None = Body(None), color: str | None = Body(None),
+                      capital: str | None = Body(None)):
+        return editing(lambda c: ed.update_polity(c, pid, name=name, color=color, capital=capital))
+
+    @app.delete("/api/polities/{pid}")
+    def remove_polity(pid: str):
+        return editing(lambda c: ed.remove_polity(c, pid))
+
+    @app.put("/api/assign")
+    def assign_systems(systems: list[str] = Body(...), polity: str | None = Body(None)):
+        return editing(lambda c: ed.assign(c, systems, polity))
+
+    @app.post("/api/polities/{pid}/grow")
+    def grow(pid: str, reach: int = Body(4, ge=1, le=40), start: str | None = Body(None),
+             overwrite: bool = Body(False)):
+        return editing(lambda c: ed.grow_polity(c, pid, reach, start=start, overwrite=overwrite))
 
     # ------------------------------------------------------------ party (GM controls)
     @app.put("/api/party")
