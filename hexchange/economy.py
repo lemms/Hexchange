@@ -36,7 +36,12 @@ BACKSTOP_SHARE = 0.03         # substitutes, as a share of demand at p_ref
 BACKSTOP_EXPONENT = 2.5
 SPOILAGE = 0.01
 STOCK_CAP_WEEKS = 12.0
-BASE_SPREAD = 0.03            # bid/ask half-spread
+BASE_SPREAD = 0.015           # bid/ask half-spread
+RAMP_BASE = 0.15              # new trade on a link may use this share of its capacity at once ...
+RAMP_RATE = 1.6               # ... and existing trade can grow by this factor per week
+# Commercial shipping adapts over weeks, not instantly: after a shock, price gaps
+# open and close gradually (a diffusion in time as well as space), which is the
+# window players can exploit.
 CUSTOMS = 0.05                # duty between different polities (fraction of price)
 HOSTILE_TARIFF = 0.25         # extra duty at relation -1
 
@@ -96,10 +101,10 @@ class Simulation:
             ok = tech >= g.production.min_tech
             if g.production.requires_any:
                 ok &= np.array([bool(cs & set(g.production.requires_any)) for cs in codes])
-            self.K[:, k] = g.production.base * self.weight * pm * ok
+            self.K[:, k] = g.production.base * s.volume_scale * self.weight * pm * ok
             dm = np.array([np.prod([g.demand.codes.get(cd, 1.0) for cd in cs]) for cs in codes])
             tech_ok = np.where(tech >= g.demand.min_tech, 1.0, 0.25)
-            self.D0[:, k] = g.demand.base * self.weight * dm * tech_ok
+            self.D0[:, k] = g.demand.base * s.volume_scale * self.weight * dm * tech_ok
         gid = {g.id: k for k, g in enumerate(s.goods)}
         self.recipe = np.zeros((self.G, self.G))          # [output, input]
         for k, g in enumerate(s.goods):
@@ -198,6 +203,25 @@ class Simulation:
             if supply > 0 and demand > 0:
                 self.K[:, k] *= margin * demand / supply
 
+    def _previous_flows(self) -> tuple[np.ndarray, np.ndarray]:
+        """Last week's net flows (a->b positive) on lanes and uncharted jumps, from the saved state."""
+        st = self.camp.state
+        lane = np.zeros((self.E, self.G))
+        for f in st.flows:
+            e, k = self.ix.lane.get(f.lane), self.ix.good.get(f.good)
+            if e is not None and k is not None:
+                lane[e, k] = f.amount
+        off = np.zeros((len(self.off_a), self.G))
+        if st.smuggling:
+            if not hasattr(self, "_off_index"):
+                ids = [x.id for x in self.camp.systems]
+                self._off_index = {f"{ids[a]}~{ids[b]}": o for o, (a, b) in enumerate(zip(self.off_a, self.off_b))}
+            for f in st.smuggling:
+                o, k = self._off_index.get(f.lane), self.ix.good.get(f.good)
+                if o is not None and k is not None:
+                    off[o, k] = f.amount
+        return lane, off
+
     def _shares_from_flows(self) -> None:
         if not self.camp.state.flows or self.E == 0:
             return
@@ -251,7 +275,12 @@ class Simulation:
     def warmup(self, weeks: int = 16) -> None:
         """Run the economy without advancing the calendar, to reach a steady state."""
         tick = self.camp.state.tick
+        inertia = self.camp.options.trade_inertia
+        self.camp.options.trade_inertia = False      # settle fast, then switch inertia back on
         for _ in range(weeks):
+            self._tick(record=False)
+        self.camp.options.trade_inertia = inertia
+        for _ in range(min(4, weeks)):
             self._tick(record=False)
         self.camp.state.tick = tick
         self.camp.state.history.clear()
@@ -309,6 +338,8 @@ class Simulation:
         n_l, n_o = self.E, len(self.off_a)
         off_risk = lp.offlane_risk + mods.offlane_risk[self.off_a] + mods.offlane_risk[self.off_b]
 
+        prev_lane, prev_off = self._previous_flows()
+
         new_price = np.zeros_like(price)
         S_tot = np.zeros_like(price)
         D_tot = np.zeros_like(price)
@@ -323,13 +354,19 @@ class Simulation:
             tpu = self.tpu[k]
             lane_cap_units = self.lane_cap * mods.lane_capacity[:, k] * self.share[:, k] / tpu
             cap_l = np.concatenate([lane_cap_units, lane_cap_units])
+            if c.options.trade_inertia:
+                prev = np.concatenate([np.maximum(prev_lane[:, k], 0), np.maximum(-prev_lane[:, k], 0)])
+                cap_l = np.minimum(cap_l, RAMP_BASE * cap_l + RAMP_RATE * prev)
             # contraband never moves on charted lanes into a system that bans it
             cap_l[self.illegal[np.concatenate([b, a]), k]] = 0.0
             lane_cost = (lp.freight_rate * self.lane_len * tpu + self.lane_toll
                          + (self.lane_risk + mods.lane_risk) * pr
                          + (rel_tariff + mods.lane_tariff[:, k]) * pr)
             cost_l = np.concatenate([lane_cost + self.port_fee[b] * tpu, lane_cost + self.port_fee[a] * tpu])
-            off_cap = np.full(2 * n_o, lp.base_capacity * lp.offlane_capacity / self.G / tpu)
+            off_cap = np.full(2 * n_o, lp.base_capacity * s.volume_scale * lp.offlane_capacity / self.G / tpu)
+            if c.options.trade_inertia:
+                prev = np.concatenate([np.maximum(prev_off[:, k], 0), np.maximum(-prev_off[:, k], 0)])
+                off_cap = np.minimum(off_cap, RAMP_BASE * off_cap + RAMP_RATE * prev)
             off_cost = np.tile(lp.freight_rate * lp.offlane_factor * self.off_len * tpu + off_risk * pr, 2)
             net = Network(self.N, tail, head, np.concatenate([cap_l, off_cap]),
                           np.concatenate([cost_l, off_cost]))

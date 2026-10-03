@@ -14,6 +14,8 @@ import heapq
 from dataclasses import asdict, dataclass
 
 
+import numpy as np
+
 from . import hexgrid
 from .economy import Simulation
 
@@ -92,6 +94,8 @@ def find_routes(sim: Simulation, origin: str, *, cargo_tons: float = 100.0, jump
         min_profit = float(min(g.base_price for g in s.goods))
     prices = sim.prices
     stock = sim._arr("stock")
+    m = sim.camp.state.market
+    turnover = (np.array(m.supply).reshape(sim.N, sim.G) if m.supply else sim.K)
     out: list[Route] = []
     for dest, (jumps, dist, off, risk, path) in reachable(sim, origin, jump, max_jumps, lanes_only).items():
         for k, g in enumerate(s.goods):
@@ -106,7 +110,10 @@ def find_routes(sim: Simulation, origin: str, *, cargo_tons: float = 100.0, jump
                 continue
             impact = 1 / sim.depth(o, k) + 1 / sim.depth(dest, k)
             q = margin / impact
-            q = min(q, cargo_tons / g.tons_per_unit, max(0.0, float(stock[o, k])) + 1e-9)
+            # players can buy from the warehouse and from this week's market turnover;
+            # price impact (above) already makes large purchases dearer
+            available = max(0.0, float(stock[o, k])) + max(0.0, float(turnover[o, k]))
+            q = min(q, cargo_tons / g.tons_per_unit, available)
             if q <= 0:
                 continue
             profit = q * margin - 0.5 * q * q * impact

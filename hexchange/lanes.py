@@ -129,6 +129,6 @@ def build_lanes(camp: Campaign, rng: random.Random) -> list[Lane]:
         pb = s.ports[str(b.attrs[s.roles.port])]
         d = length[(i, j)]
         out.append(Lane(id=lane_id(a.id, b.id), a=a.id, b=b.id, length=d,
-                        capacity=round(p.base_capacity * min(pa.capacity, pb.capacity), 1),
+                        capacity=round(p.base_capacity * s.volume_scale * min(pa.capacity, pb.capacity), 1),
                         risk=round(p.lane_risk * d, 4)))
     return out

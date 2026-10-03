@@ -140,7 +140,14 @@ def test_embargo_closes_lanes_but_smugglers_continue(small):
     a, b = _border(small)
     camp = small.camp
     small.step(3)
-    smug_before = len(camp.state.smuggling)
+    pol0 = {s.id: s.polity for s in camp.systems}
+    value = {g.id: g.base_price for g in camp.setting.goods}
+
+    def smuggled_across():
+        return sum(abs(f.amount) * value[f.good] for f in camp.state.smuggling
+                   if {pol0[x] for x in f.lane.split("~")} == {a, b})
+
+    smug_before = smuggled_across()
     small.add_event(hx.Event(id="emb", type="embargo", name="embargo", start=camp.state.tick,
                              targets=hx.Targets(polities=[a]), params={"against": [b]}))
     small.step(4)
@@ -151,7 +158,7 @@ def test_embargo_closes_lanes_but_smugglers_continue(small):
     smug_cross = [f for f in camp.state.smuggling
                   if {pol[x] for x in f.lane.split("~")} == {a, b}]
     assert smug_cross, "smugglers should still carry goods across the embargoed border"
-    assert len(camp.state.smuggling) >= smug_before
+    assert smuggled_across() >= 0.9 * smug_before    # smuggling across the border does not collapse
 
 
 def test_war_raises_military_prices(small):
@@ -337,3 +344,13 @@ def test_generated_polities_get_laws(setting):
     camp = hx.generate(setting, width=16, height=16, polities=4, seed=9)
     assert all(p.legality for p in camp.polities)
     assert {"tag:military", "tag:contraband"} <= set(camp.polities[0].legality)
+
+
+def test_most_ports_have_trade_routes(setting):
+    """Markets must be deep enough that a typical hold finds profitable runs."""
+    camp = hx.generate(setting, width=16, height=16, density=0.45, polities=3, seed=3)
+    sim = hx.Simulation(camp)
+    sim.warmup(12)
+    ports = [x.id for x in camp.systems if setting.ports[str(x.attrs["port"])].lanes]
+    with_routes = sum(bool(hx.find_routes(sim, sid, cargo_tons=200, jump=2, max_jumps=3)) for sid in ports)
+    assert with_routes / len(ports) > 0.8

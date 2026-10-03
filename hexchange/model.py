@@ -176,6 +176,9 @@ class Setting(_Model):
     ports: dict[str, PortClass]
     goods: list[Good]
     lanes: LaneParams = Field(default_factory=LaneParams)
+    volume_scale: float = Field(
+        1.0, gt=0, description="multiplies every production and demand rate and every lane capacity: "
+                               "how many tons a week move in this universe, relative to the ships trading in it")
     name_syllables: list[str] = Field(default_factory=lambda: ["ka", "ra", "to", "mi", "su", "ne", "lo", "va"])
     polity_names: list[str] = Field(default_factory=list)
     random_events: list[RandomEvent] = Field(default_factory=list)
@@ -315,6 +318,8 @@ class Options(_Model):
     calibrate: bool = Field(True, description="scale each good's production so galaxy-wide supply "
                                               "matches demand (incl. industrial inputs) at base price")
     supply_margin: float = Field(1.05, description="calibrated supply / demand ratio")
+    trade_inertia: bool = Field(True, description="commercial shipping ramps up over weeks instead of "
+                                                  "re-routing instantly, so shocks leave exploitable gaps")
     history_length: int = 52
     seed: int = 0
 
