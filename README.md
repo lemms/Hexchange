@@ -28,7 +28,8 @@ hexchange settings                                      # list available setting
 hexchange serve campaign.hexchange.json                 # web UI: http://127.0.0.1:8000
 ```
 
-In the UI, click **New sector…** to generate a galaxy. The DM view is at `/` and the player
+In the UI, click **New sector…** to generate a galaxy. Changes autosave to the campaign file;
+**Save** lets you save elsewhere or download a copy. The DM view is at `/` and the player
 view at `/player`. Players see the map, plus market prices only at the systems the DM shares.
 
 Without the UI:
@@ -94,14 +95,26 @@ Each tick is one week.
    polities (higher when their relations are hostile).
 5. **Calibration:** production is scaled per good so that galaxy-wide supply matches demand at
    the base price. Any setting therefore yields sensible prices, and local conditions create
-   the gradients players exploit.
+   the gradients players exploit. The setting's `volume_scale` sets how many tons a week move,
+   which decides how much a player ship's trading moves prices.
+6. **Trade inertia** (on by default): commercial shipping on a link can only grow gradually
+   from week to week. After a war, embargo or boom, price gaps open and close over several
+   weeks, diffusing in time as well as across the map. That window is what players exploit.
+
+### Laws and contraband
+
+Each good can have a default law-level threshold (`illegal_above_law`). Each polity can
+override it, by good or by tag, with `legal`, `illegal`, or "illegal above law N". At
+generation, polities roll their laws from the setting's `polity_legality` presets, so
+neighbouring regions differ. A `legality` event changes laws temporarily, e.g. martial law.
+The DM edits polity laws in the Politics tab.
 
 ### Smugglers
 
 Every pair of systems within jump range without a charted lane is an **uncharted jump**: costly,
 risky and narrow. Wars, embargoes, tariffs and lane disruptions act only on charted lanes, so
-smugglers route around them. Contraband (a good whose `illegal_above_law` is exceeded at the
-destination) can only arrive by uncharted jumps.
+smugglers route around them. Contraband, meaning goods banned at the destination by its law level or
+polity laws, can only arrive by uncharted jumps.
 
 In tests, a total embargo cut a polity's legal trade to zero, while smuggling across its
 border rose 3.6× and import prices inside rose up to 3.9×.
