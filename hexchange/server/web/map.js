@@ -193,14 +193,21 @@ export class HexMap {
       this._apply();
     }, { passive: false });
     svg.addEventListener("pointerdown", e => {
-      drag = { x: e.clientX, y: e.clientY, v: { ...this.view }, moved: false };
-      svg.setPointerCapture(e.pointerId);
+      if (e.button !== 0) return;
+      drag = { x: e.clientX, y: e.clientY, v: { ...this.view }, moved: false, id: e.pointerId };
     });
     svg.addEventListener("pointermove", e => {
       if (!drag) return;
+      if (!drag.moved) {
+        if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) <= 4) return;
+        // capture only once it is really a drag: capturing on press would retarget
+        // the click away from the system/lane under the cursor
+        drag.moved = true;
+        svg.classList.add("dragging");
+        svg.setPointerCapture(drag.id);
+      }
       const r = svg.getBoundingClientRect();
       const dx = (e.clientX - drag.x) * drag.v.w / r.width, dy = (e.clientY - drag.y) * drag.v.h / r.height;
-      if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) { drag.moved = true; svg.classList.add("dragging"); }
       this.view = { ...drag.v, x: drag.v.x - dx, y: drag.v.y - dy };
       this._apply();
     });
