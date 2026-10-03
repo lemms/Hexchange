@@ -30,7 +30,10 @@ hexchange serve campaign.hexchange.json                 # web UI: http://127.0.0
 
 In the UI, click **New sector…** to generate a galaxy. Changes autosave to the campaign file;
 **Save** lets you save elsewhere or download a copy. The GM view is at `/` and the player
-view at `/player`. Players see nothing until the GM reveals systems: then only those systems and their markets, plus the lanes leading out of them to uncharted (unnamed) endpoints. Hidden systems are never sent to the player's browser.
+view at `/player`. **Party and information:** the GM places the party at a system and moves it around. Players
+see that market live. When they leave, they keep the prices as they were on departure, with
+no further updates. The GM can also sell them a one-off courier report for a distant system.
+Players see nothing until the GM reveals systems: then only those systems and their markets, plus the lanes leading out of them to uncharted (unnamed) endpoints. Hidden systems are never sent to the player's browser.
 
 Without the UI:
 
@@ -67,6 +70,8 @@ sim.step(4)                                           # four weeks
 q = sim.quote(camp.systems[0].id, "food")             # price, buy/sell, stock, legality
 routes = hx.find_routes(sim, camp.systems[0].id, cargo_tons=200, jump=2)
 sim.trade(camp.systems[0].id, "food", 50)             # players buy 50 units
+sim.move_party(camp.systems[1].id)                    # GM moves the party; old prices are remembered
+sim.market_report(camp.systems[5].id, note="courier") # one-off snapshot of a distant market
 sim.add_event(hx.Event(id="war1", type="war", name="Border war", start=camp.state.tick,
                        targets=hx.Targets(polities=["P1", "P2"])))
 hx.save_campaign(camp, "sector.hexchange.json")

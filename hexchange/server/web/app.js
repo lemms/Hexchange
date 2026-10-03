@@ -1,4 +1,4 @@
-import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=7";
+import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=8";
 
 const $ = sel => document.querySelector(sel);
 const h = (tag, attrs = {}, ...kids) => {
@@ -53,6 +53,7 @@ function setCampaign(data) {
   gs.replaceChildren(h("option", { value: "" }, "All goods (value)"), ...goods.map(g => h("option", { value: g.id }, g.name)));
   gs.value = goods.some(g => g.id === prev) ? prev : (goods[0]?.id || "");
   map.load(data);
+  map.setParty(data.player_view.location);
   selected = null;
   refreshOverlay(); renderEvents(); renderRoutesForm(); renderPolitics(); renderPlayers();
   $("#pane-system").replaceChildren(h("p", { class: "muted" }, "Click a system on the map. Shift-click to select several (for events)."),
@@ -63,6 +64,16 @@ async function refreshCampaign() {
   const data = await api("/api/campaign");
   camp = data;
   $("#tick").textContent = `${data.setting.time_unit} ${data.tick}`;
+  map.setParty(camp.player_view.location);
+}
+
+async function moveParty(id) {
+  await guard(async () => {
+    await api("/api/party", { method: "PUT", body: { location: id } });
+    await refreshCampaign(); renderPlayers();
+    if (selected) showSystem(selected);
+    toast(id ? `Party moved to ${map.byId[id].name}` : "Party removed from the map");
+  });
 }
 
 // ------------------------------------------------------------------ header
@@ -85,7 +96,7 @@ function wireHeader() {
         $("#tick").textContent = `${camp.setting.time_unit} ${s.tick}`;
       } while (s.running);
       if (s.error) throw new Error(s.error);
-      await refreshCampaign(); await refreshOverlay(); renderEvents();
+      await refreshCampaign(); await refreshOverlay(); renderEvents(); renderPlayers();
       if (selected) await showSystem(selected);
       toast(`Advanced to ${camp.setting.time_unit} ${s.tick}`);
     } finally { setBusy(false); }
@@ -141,6 +152,7 @@ function wireTabs() {
   for (const b of document.querySelectorAll(".tabs button")) b.onclick = () => showTab(b.dataset.tab);
 }
 function showTab(name) {
+  if (name === "players") renderPlayers();         // always show current party/knowledge
   for (const b of document.querySelectorAll(".tabs button")) b.classList.toggle("on", b.dataset.tab === name);
   for (const p of document.querySelectorAll(".pane")) p.classList.toggle("on", p.id === `pane-${name}`);
 }
@@ -192,6 +204,9 @@ async function showSystem(id) {
   const codeName = Object.fromEntries(camp.setting.codes.map(c => [c.code, c.name]));
   const pol = camp.polities.find(p => p.id === d.polity);
   const visible = camp.player_view.visible_systems.includes(id);
+  const partyHere = camp.player_view.location === id;
+  const known = camp.player_view.knowledge?.[id];
+  const courierNote = h("input", { placeholder: "note, e.g. bought from a courier for Cr500", style: "flex:1;min-width:180px" });
   const pane = $("#pane-system");
   const marketRows = d.market.map(m => {
     const ratio = m.price / m.base_price;
@@ -216,7 +231,17 @@ async function showSystem(id) {
       ...d.events.map(e => h("span", { class: "pill warn" }, `event: ${e}`))),
     h("div", { class: "row" },
       h("button", { onclick: () => map.centerOn(id) }, "Centre map"),
-      h("button", { onclick: () => togglePlayerVisible(id) }, visible ? "Hide from players" : "Show to players")),
+      h("button", { onclick: () => togglePlayerVisible(id) }, visible ? "Hide from players" : "Show to players"),
+      partyHere ? h("span", { class: "pill on" }, "◆ party is here")
+        : h("button", { class: "primary", onclick: () => moveParty(id) }, "Move party here")),
+    h("div", { class: "muted" }, partyHere ? "Players see this market live."
+      : known ? `Players know prices here as of ${camp.setting.time_unit} ${known.tick} (${known.source === "report" ? "courier report" : "their visit"}${known.note ? ": " + known.note : ""}).`
+      : "Players have no market information here."),
+    ...(partyHere ? [] : [h("div", { class: "row" }, courierNote, h("button", { onclick: () => guard(async () => {
+      await api("/api/party/report", { method: "POST", body: { system: id, note: courierNote.value } });
+      await refreshCampaign(); showSystem(id); renderPlayers();
+      toast(`Players now hold a courier report for ${d.name} (week ${camp.tick})`);
+    }) }, "Give courier report"))]),
     h("h3", {}, "Market"),
     h("table", {}, h("tr", {}, h("th", {}, "Good"), h("th", {}, `Price ${currency}`), h("th", {}, "Buy"), h("th", {}, "Sell"),
       h("th", {}, "Stock"), h("th", {}, "Trend"), h("th", {}, "Trade (t)")), ...marketRows),
@@ -424,10 +449,29 @@ async function renderPlayers() {
   const pane = $("#pane-players");
   const trades = await api("/api/trades");
   const vis = camp.player_view.visible_systems;
+  const loc = camp.player_view.location;
+  const knowledge = Object.entries(camp.player_view.knowledge || {}).sort((x, y) => y[1].tick - x[1].tick);
   pane.replaceChildren(
     h("h2", {}, "Player view"),
     h("p", { class: "muted" }, "Players open ", h("a", { href: "/player", target: "_blank", style: "color:var(--accent)" }, location.origin + "/player"),
-      " — they see only the systems listed here (with their markets) and the lanes leading out of them. Everything else stays blank."),
+      ". They see the party's location live, remembered prices where they have been or bought courier reports, and systems you reveal. Everything else stays blank."),
+    h("h3", {}, "Party location"),
+    h("div", { class: "row" },
+      loc ? h("strong", {}, `◆ ${map.byId[loc]?.name} (${loc})`) : h("span", { class: "muted" }, "Not placed"),
+      loc ? h("button", { onclick: () => map.centerOn(loc) }, "Centre") : null,
+      selected && selected !== loc ? h("button", { class: "primary", onclick: () => moveParty(selected) }, `Move to ${map.byId[selected].name}`) : null,
+      loc ? h("button", { onclick: () => moveParty(null) }, "Remove") : null),
+    h("p", { class: "muted" }, "Select a system on the map, then move the party there. The system they leave keeps the prices they last saw."),
+    h("h3", {}, `Players' market information (${knowledge.length})`),
+    knowledge.length ? h("table", {}, h("tr", {}, h("th", {}, "System"), h("th", {}, "As of"), h("th", {}, "Source"), h("th", {}, "")),
+      ...knowledge.map(([sid, k]) => h("tr", {},
+        h("td", {}, map.byId[sid]?.name || sid, sid === loc ? h("span", { class: "pill on" }, "live") : ""),
+        h("td", {}, `${camp.setting.time_unit} ${k.tick}`),
+        h("td", { title: k.note || "" }, k.source === "report" ? "courier" : "visit"),
+        h("td", {}, sid === loc ? "" : h("button", { class: "danger", onclick: () => guard(async () => {
+          await api(`/api/party/knowledge/${sid}`, { method: "DELETE" }); await refreshCampaign(); renderPlayers();
+        }) }, "Forget"))))) : h("p", { class: "muted" }, "None yet."),
+    h("h3", {}, "Revealed on the map (no prices unless visited or reported)"),
     h("div", { class: "row" },
       h("button", { onclick: () => guard(async () => {
         const ids = new Set([...vis, ...eventSystems()]); await setVisible([...ids]);

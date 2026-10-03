@@ -65,12 +65,37 @@ class State:
             hio.save_campaign(self.sim.camp, self.path)
 
 
+def player_known(camp: Campaign) -> set[str]:
+    """Systems that exist for the players: revealed by the GM, the party's location,
+    and anywhere they hold market data for."""
+    pv = camp.player_view
+    return set(pv.visible_systems) | set(pv.knowledge) | ({pv.location} if pv.location else set())
+
+
+def _known_market(sim: Simulation, sid: str) -> dict[str, Any] | None:
+    """Player-facing market for one system: live if the party is there, else their snapshot."""
+    pv = sim.camp.player_view
+    goods = sim.camp.setting.goods
+    if sid == pv.location:
+        snap, live = sim.snapshot(sid), True
+    elif sid in pv.knowledge:
+        snap, live = pv.knowledge[sid], False
+    else:
+        return None
+    return {"live": live, "tick": snap.tick, "source": snap.source, "note": snap.note,
+            "age": sim.camp.state.tick - snap.tick,
+            "market": [{"good": g.id, "price": snap.price[k], "buy": snap.buy[k], "sell": snap.sell[k],
+                        "legal": snap.legal[k], "base_price": g.base_price}
+                       for k, g in enumerate(goods) if k < len(snap.price)]}
+
+
 def _map_payload(sim: Simulation, player: bool = False) -> dict[str, Any]:
     """Map data.  For players, only systems the GM has revealed are included, plus
     the lanes leading out of them.  The far end of such a lane is sent as an
     anonymous position only (``unknown``), so nothing hidden reaches the browser."""
     c, s = sim.camp, sim.camp.setting
-    visible = set(c.player_view.visible_systems)
+    pv = c.player_view
+    visible = player_known(c)
     systems = [x for x in c.systems if x.id in visible] if player else c.systems
     lanes = [ln for ln in c.lanes if ln.a in visible or ln.b in visible] if player else c.lanes
     by_id = {x.id: x for x in c.systems}
@@ -91,7 +116,12 @@ def _map_payload(sim: Simulation, player: bool = False) -> dict[str, Any]:
             "roles": s.roles.model_dump(),
         },
         "systems": [{"id": x.id, "name": x.name, "col": x.col, "row": x.row, "profile": profile(s, x.attrs),
-                     "attrs": x.attrs, "codes": x.codes, "polity": x.polity, "visible": True} for x in systems],
+                     "attrs": x.attrs, "codes": x.codes, "polity": x.polity, "visible": True,
+                     "here": x.id == pv.location,
+                     "known_tick": pv.knowledge[x.id].tick if x.id in pv.knowledge else None,
+                     "known_source": pv.knowledge[x.id].source if x.id in pv.knowledge else None}
+                    for x in systems],
+        "party": pv.location,
         "lanes": [ln.model_dump(include={"id", "a", "b", "length"}) if player else ln.model_dump() for ln in lanes],
         "unknown": [{"id": sid, "col": by_id[sid].col, "row": by_id[sid].row} for sid in unknown],
         "polities": [p.model_dump(exclude={"legality"}) if player else p.model_dump() for p in polities],
@@ -397,12 +427,14 @@ def create_app(campaign_path: str | None = None, settings_dirs: list[str] | None
 
     # ------------------------------------------------------------ player view
     @app.put("/api/player_view")
-    def set_player_view(view: PlayerView):
+    def set_player_view(visible_systems: list[str] = Body(...), show_flows: bool = Body(False)):
         with st.lock:
             sim = st.need()
-            sim.camp.player_view = view
+            pv = sim.camp.player_view
+            pv.visible_systems = [s for s in visible_systems if s in sim.ix.sys]
+            pv.show_flows = show_flows
             st.save()
-            return view.model_dump()
+            return pv.model_dump()
 
     @app.get("/api/player/campaign")
     def player_campaign():
@@ -411,23 +443,59 @@ def create_app(campaign_path: str | None = None, settings_dirs: list[str] | None
 
     @app.get("/api/player/prices")
     def player_prices(good: str):
+        """Prices as the players know them: live where the party is, remembered elsewhere."""
         with st.lock:
             sim = st.need()
-            return _prices(sim, good, set(sim.camp.player_view.visible_systems))
+            if good not in sim.ix.good:
+                raise HTTPException(404, good)
+            k = sim.ix.good[good]
+            out = {}
+            for sid in player_known(sim.camp):
+                km = _known_market(sim, sid)
+                if km:
+                    row = km["market"][k]
+                    out[sid] = {"price": row["price"], "legal": row["legal"], "live": km["live"], "age": km["age"]}
+            return {"good": good, "base_price": float(sim.pref[k]), "tick": sim.camp.state.tick, "systems": out}
 
     @app.get("/api/player/system/{sid}")
     def player_system(sid: str):
         with st.lock:
             sim = st.need()
-            if sid not in sim.camp.player_view.visible_systems:
-                raise HTTPException(403, "no market data for this system")
-            data = _system(sim, sid)
-            data["events"] = []
-            for row in data["market"]:
-                row.pop("production", None)
-                row.pop("supply", None)
-                row.pop("demand", None)
-            return data
+            if sid not in player_known(sim.camp):
+                raise HTTPException(403, "unknown system")
+            x = sim.camp.systems[sim.ix.sys[sid]]
+            return {"id": x.id, "name": x.name, "profile": profile(sim.camp.setting, x.attrs), "codes": x.codes,
+                    "polity": x.polity, "here": sid == sim.camp.player_view.location,
+                    "known": _known_market(sim, sid), "tick": sim.camp.state.tick}
+
+    # ------------------------------------------------------------ party (GM controls)
+    @app.put("/api/party")
+    def move_party(location: str | None = Body(None, embed=True)):
+        with st.lock:
+            sim = st.need()
+            if location is not None and location not in sim.ix.sys:
+                raise HTTPException(404, location)
+            sim.move_party(location)
+            st.save()
+            return sim.camp.player_view.model_dump()
+
+    @app.post("/api/party/report")
+    def market_report(system: str = Body(...), note: str = Body("")):
+        with st.lock:
+            sim = st.need()
+            if system not in sim.ix.sys:
+                raise HTTPException(404, system)
+            snap = sim.market_report(system, note)
+            st.save()
+            return snap.model_dump()
+
+    @app.delete("/api/party/knowledge/{sid}")
+    def forget(sid: str):
+        with st.lock:
+            sim = st.need()
+            sim.camp.player_view.knowledge.pop(sid, None)
+            st.save()
+            return {"ok": True}
 
     @app.post("/api/client-log")
     def client_log(entry: dict = Body(...)):

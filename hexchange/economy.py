@@ -26,7 +26,7 @@ import numpy as np
 
 from . import events as ev_mod, hexgrid
 from .equilibrium import Curves, Network, solve
-from .model import Campaign, Event, LaneFlow, MarketState, Trade, relation_key
+from .model import Campaign, Event, LaneFlow, MarketSnapshot, MarketState, Trade, relation_key
 
 SUPPLY_ELASTICITY = 0.6
 STOCK_RELEASE = 0.35          # share of trader stock offered each week at p_ref
@@ -400,6 +400,9 @@ class Simulation:
             st.tick += 1
             self._record_history()
             self.refresh_legality()          # quotes reflect the new week's laws and events
+            loc = c.player_view.location
+            if loc in self.ix.sys:               # the party sees its current market live
+                c.player_view.knowledge[loc] = self.snapshot(loc)
 
     def _record_history(self) -> None:
         st = self.camp.state
@@ -439,6 +442,34 @@ class Simulation:
         return [self.quote(system, g.id) for g in self.camp.setting.goods]
 
     # ------------------------------------------------------------------ actions
+    # ------------------------------------------------------------------ player knowledge
+    def snapshot(self, system: str, source: str = "visit") -> MarketSnapshot:
+        """The market at ``system`` right now, as players would record it."""
+        qs = self.market(system)
+        return MarketSnapshot(tick=self.camp.state.tick, source=source,
+                              price=[round(q.price, 2) for q in qs], buy=[round(q.buy, 2) for q in qs],
+                              sell=[round(q.sell, 2) for q in qs], legal=[q.legal for q in qs])
+
+    def move_party(self, system: str | None) -> None:
+        """GM moves the party.  The place they leave keeps its last-seen prices;
+        the place they arrive at is known live from now on."""
+        pv = self.camp.player_view
+        if pv.location in self.ix.sys:
+            pv.knowledge[pv.location] = self.snapshot(pv.location)
+        if system is not None and system not in self.ix.sys:
+            raise KeyError(system)
+        pv.location = system
+        if system is not None:
+            pv.knowledge[system] = self.snapshot(system)
+
+    def market_report(self, system: str, note: str = "") -> MarketSnapshot:
+        """GM gives the players a one-off snapshot of a distant system's prices
+        (e.g. bought from a courier).  It does not update afterwards."""
+        snap = self.snapshot(system, source="report")
+        snap.note = note
+        self.camp.player_view.knowledge[system] = snap
+        return snap
+
     def trade(self, system: str, good: str, quantity: float, note: str = "") -> Trade:
         """Players buy (quantity > 0) or sell (< 0).  Executes at the quoted price
         plus market impact, and feeds into next week's equilibrium."""

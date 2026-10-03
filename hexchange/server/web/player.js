@@ -1,4 +1,4 @@
-import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=7";
+import { HexMap, api, fmt, priceColor } from "/static/map.js?v=8";
 
 const $ = s => document.querySelector(s);
 const h = (tag, attrs = {}, ...kids) => {
@@ -19,10 +19,14 @@ async function load() {
   gs.replaceChildren(...camp.setting.goods.map(g => h("option", { value: g.id }, g.name)));
   if (prev) gs.value = prev;
   map.load(camp);
+  map.setParty(camp.party);
   map.fitTo([...camp.systems.map(s => s.id), ...(camp.unknown || []).map(u => u.id)]);   // zoom to what is known
+  const here = camp.party && map.byId[camp.party];
+  $("#where").textContent = here ? `◆ Party at ${here.name} (${here.id})` : "";
   overlay();
   if (!camp.systems.length)
     $("#pane").replaceChildren(h("p", { class: "muted" }, "Your GM hasn't revealed any systems yet."));
+  else if (here) showSystem(here.id);
 }
 
 async function overlay() {
@@ -38,10 +42,10 @@ async function overlay() {
     const prices = await api(`/api/player/prices?good=${encodeURIComponent(g)}`);
     map.colorByPrice(prices);
     const stops = [0.35, 0.6, 1, 1.6, 2.8].map(r => priceColor(r)).join(",");
-    $("#legend").replaceChildren(h("strong", {}, `${goodName[g]} — known prices`),
+    $("#legend").replaceChildren(h("strong", {}, `${goodName[g]} — prices you know`),
       h("div", { class: "bar", style: `background:linear-gradient(90deg,${stops})` }),
       h("div", { class: "row" }, h("span", {}, "cheap"), h("span", {}, "typical"), h("span", {}, "dear")),
-      h("div", { class: "muted" }, "Dark systems: no market reports."));
+      h("div", { class: "muted" }, "Faded: older information. Dark: no information."));
   }
 }
 
@@ -50,11 +54,17 @@ async function showSystem(id) {
   const pane = $("#pane");
   const head = h("h2", {}, `${s.name} `, h("span", { class: "muted mono" }, `${s.id} · ${s.profile}`));
   const d = await api(`/api/player/system/${id}`);
-  const cur = camp.setting.currency;
-  pane.replaceChildren(head,
-    h("table", {}, h("tr", {}, h("th", {}, "Good"), h("th", {}, `Buy ${cur}`), h("th", {}, `Sell ${cur}`), h("th", {}, "Trend")),
-      ...d.market.map(m => h("tr", {}, h("td", {}, goodName[m.good], m.legal ? "" : h("span", { class: "pill warn" }, "illegal")),
-        h("td", {}, fmt(m.buy)), h("td", {}, fmt(m.sell)), h("td", {}, sparkline(m.history))))),
+  const cur = camp.setting.currency, tu = camp.setting.time_unit;
+  const k = d.known;
+  if (!k) { pane.replaceChildren(head, h("p", { class: "muted" }, "You have no market information for this system.")); return; }
+  const status = k.live ? h("p", { class: "pill on" }, "◆ You are here — live prices")
+    : h("p", { class: "muted" }, `Prices as of ${tu} ${k.tick} (${k.age === 0 ? "this " + tu : k.age + " " + tu + (k.age === 1 ? "" : "s") + " ago"}) — `,
+        k.source === "report" ? `courier report${k.note ? ": " + k.note : ""}` : "from your last visit",
+        ". Real prices may have changed.");
+  pane.replaceChildren(head, status,
+    h("table", {}, h("tr", {}, h("th", {}, "Good"), h("th", {}, `Buy ${cur}`), h("th", {}, `Sell ${cur}`), h("th", {}, "vs typical")),
+      ...k.market.map(m => h("tr", {}, h("td", {}, goodName[m.good], m.legal ? "" : h("span", { class: "pill warn" }, "illegal")),
+        h("td", {}, fmt(m.buy)), h("td", {}, fmt(m.sell)), h("td", {}, `×${(m.price / m.base_price).toFixed(2)}`)))),
     camp.setting.disclaimer ? h("p", { class: "disclaimer" }, camp.setting.disclaimer) : null);
 }
 

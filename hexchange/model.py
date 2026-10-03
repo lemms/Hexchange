@@ -308,9 +308,25 @@ class State(_Model):
         default_factory=list, description="[lane][good] share of each lane's tonnage capacity")
 
 
+class MarketSnapshot(_Model):
+    """What the players know about one market: prices as they were at ``tick``.
+    Lists follow the order of ``setting.goods``."""
+
+    tick: int
+    price: list[float]
+    buy: list[float]
+    sell: list[float]
+    legal: list[bool]
+    source: Literal["visit", "report"] = "visit"
+    note: str = Field("", description="e.g. 'bought from a courier at Juntel for Cr500'")
+
+
 class PlayerView(_Model):
-    visible_systems: list[str] = Field(default_factory=list)
+    visible_systems: list[str] = Field(default_factory=list, description="systems the GM reveals on the map")
     show_flows: bool = False
+    location: str | None = Field(None, description="the party's current system (set by the GM): live prices")
+    knowledge: dict[str, MarketSnapshot] = Field(
+        default_factory=dict, description="system id -> last market data the players saw or were told")
 
 
 class Options(_Model):

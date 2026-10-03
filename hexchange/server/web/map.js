@@ -39,7 +39,7 @@ export class HexMap {
     this.view = { x: 0, y: 0, w: 100, h: 100 };
     this.selected = null; this.multi = new Set(); this.selLane = null;
     this.layers = {};
-    for (const name of ["hex", "smug", "lanes", "path", "unk", "sys", "labels"]) this.layers[name] = el("g", {}, svg);
+    for (const name of ["hex", "smug", "lanes", "path", "unk", "party", "sys", "labels"]) this.layers[name] = el("g", {}, svg);
     this._interact();
   }
 
@@ -94,6 +94,16 @@ export class HexMap {
     this._apply();
   }
 
+  setParty(id) {
+    this.layers.party.replaceChildren();
+    const s = id && this.byId[id];
+    if (!s) return;
+    const [x, y] = hexCenter(s.col, s.row);
+    el("circle", { cx: x, cy: y, r: R * 0.82, class: "party" }, this.layers.party);
+    const t = el("text", { x, y: y - R * 0.95, class: "partylabel" }, this.layers.party);
+    t.textContent = "◆ party";
+  }
+
   colorByPolity() {
     for (const s of this.data.systems) {
       const p = this.polity[s.polity];
@@ -107,6 +117,8 @@ export class HexMap {
       const e = this.sysEls[s.id];
       if (!q) { e.setAttribute("fill", "#2a3245"); continue; }
       e.setAttribute("fill", q.legal ? priceColor(q.price / prices.base_price) : "#9b59b6");
+      // player view: older information fades
+      e.style.opacity = q.age === undefined || q.live ? "" : String(Math.max(0.35, 1 - q.age / 26));
     }
   }
 
