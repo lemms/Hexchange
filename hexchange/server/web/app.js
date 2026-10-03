@@ -1,4 +1,4 @@
-import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=2";
+import { HexMap, api, fmt, priceColor, sparkline } from "/static/map.js?v=4";
 
 const $ = sel => document.querySelector(sel);
 const h = (tag, attrs = {}, ...kids) => {
@@ -43,6 +43,7 @@ async function boot() {
 }
 
 function setCampaign(data) {
+  window.__hxlog?.("boot", { systems: data.systems.length, tick: data.tick });
   camp = data; goods = data.setting.goods; currency = data.setting.currency;
   goodName = Object.fromEntries(goods.map(g => [g.id, g.name]));
   $("#campName").textContent = data.name;
@@ -65,11 +66,28 @@ async function refreshCampaign() {
 
 // ------------------------------------------------------------------ header
 function wireHeader() {
+  const stepButtons = ["#step1", "#step4", "#stepGo", "#genBtn", "#loadBtn"].map(s => $(s));
+  const setBusy = (busy, text = "") => {
+    for (const b of stepButtons) b.disabled = busy;
+    $("#busy").textContent = text;
+  };
   const step = async n => guard(async () => {
-    const r = await api("/api/step", { method: "POST", body: { weeks: n } });
-    await refreshCampaign(); await refreshOverlay(); renderEvents();
-    if (selected) await showSystem(selected);
-    toast(`Advanced to ${camp.setting.time_unit} ${r.tick}`);
+    if ($("#step1").disabled) return;
+    setBusy(true, `Simulating 0/${n}…`);
+    try {
+      await api("/api/step", { method: "POST", body: { weeks: n } });
+      let s;
+      do {                                   // poll the background job
+        await new Promise(r => setTimeout(r, 300));
+        s = await api("/api/status");
+        setBusy(true, `Simulating ${s.done}/${s.total}…`);
+        $("#tick").textContent = `${camp.setting.time_unit} ${s.tick}`;
+      } while (s.running);
+      if (s.error) throw new Error(s.error);
+      await refreshCampaign(); await refreshOverlay(); renderEvents();
+      if (selected) await showSystem(selected);
+      toast(`Advanced to ${camp.setting.time_unit} ${s.tick}`);
+    } finally { setBusy(false); }
   });
   $("#step1").onclick = () => step(1);
   $("#step4").onclick = () => step(4);
@@ -93,8 +111,10 @@ function wireHeader() {
     for (const k of ["width", "height", "polities", "seed", "warmup"]) body[k] = Number(body[k]);
     body.density = Number(body.density);
     if (!body.path) delete body.path;
-    toast("Generating…");
-    guard(async () => { setCampaign(await api("/api/generate", { method: "POST", body })); toast("Sector generated"); });
+    $("#busy").textContent = "Generating sector…";
+    $("#genBtn").disabled = true;
+    guard(async () => { setCampaign(await api("/api/generate", { method: "POST", body })); toast("Sector generated"); })
+      .finally(() => { $("#busy").textContent = ""; $("#genBtn").disabled = false; });
   });
 }
 

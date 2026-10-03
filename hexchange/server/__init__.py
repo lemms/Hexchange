@@ -50,6 +50,7 @@ class State:
         self.settings_dirs = settings_dirs
         self.path: Path | None = Path(path).expanduser() if path else None
         self.sim: Simulation | None = None
+        self.job = {"running": False, "done": 0, "total": 0, "error": None}
         if self.path and self.path.exists():
             self.sim = Simulation(hio.load_campaign(self.path))
 
@@ -159,6 +160,8 @@ def create_app(campaign_path: str | None = None, settings_dirs: list[str] | None
 
     @app.post("/api/generate")
     def gen(req: GenerateRequest):
+        if st.job["running"]:
+            raise HTTPException(409, "the simulation is running; wait for it to finish")
         with st.lock:
             setting = hio.load_setting(req.setting, st.settings_dirs)
             camp = generate(setting, name=req.name, width=req.width, height=req.height,
@@ -237,13 +240,33 @@ def create_app(campaign_path: str | None = None, settings_dirs: list[str] | None
             return sim.camp.relations
 
     # ------------------------------------------------------------ simulation
+    def run_job(weeks: int) -> None:
+        try:
+            for i in range(weeks):
+                with st.lock:                # released between weeks so the UI stays responsive
+                    st.sim.step(1)
+                st.job["done"] = i + 1
+            with st.lock:
+                st.save()
+        except Exception as e:               # surface failures to the UI instead of dying silently
+            st.job["error"] = f"{type(e).__name__}: {e}"
+        finally:
+            st.job["running"] = False
+
     @app.post("/api/step")
     def step(weeks: int = Body(1, embed=True, ge=1, le=520)):
         with st.lock:
             sim = st.need()
-            sim.step(weeks)
-            st.save()
-            return {"tick": sim.camp.state.tick, "active_events": [e.id for e in sim.active_events()]}
+            if st.job["running"]:
+                raise HTTPException(409, "the simulation is already running")
+            st.job.update(running=True, done=0, total=weeks, error=None)
+            threading.Thread(target=run_job, args=(weeks,), daemon=True).start()
+            return {"started": True, "weeks": weeks, "tick": sim.camp.state.tick}
+
+    @app.get("/api/status")
+    def status():
+        sim = st.sim
+        return {**st.job, "tick": sim.camp.state.tick if sim else None, "loaded": sim is not None}
 
     @app.get("/api/prices")
     def prices(good: str):
@@ -379,6 +402,13 @@ def create_app(campaign_path: str | None = None, settings_dirs: list[str] | None
                 row.pop("supply", None)
                 row.pop("demand", None)
             return data
+
+    @app.post("/api/client-log")
+    def client_log(entry: dict = Body(...)):
+        """Browser-side errors and diagnostics, so problems in the user's browser show up here."""
+        import sys
+        print(f"[client] {entry}", file=sys.stderr, flush=True)
+        return {"ok": True}
 
     # ------------------------------------------------------------ static UI
     @app.get("/")

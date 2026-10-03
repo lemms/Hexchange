@@ -25,7 +25,14 @@ def test_full_flow(client, tmp_path):
     assert client.get(f"/api/prices?good={good}").json()["systems"][sid]["price"] > 0
     d = client.get(f"/api/system/{sid}").json()
     assert len(d["market"]) == len(camp["setting"]["goods"])
-    assert client.post("/api/step", json={"weeks": 2}).json()["tick"] == 2
+    assert client.post("/api/step", json={"weeks": 2}).json()["started"]
+    import time
+    for _ in range(200):
+        s = client.get("/api/status").json()
+        if not s["running"]:
+            break
+        time.sleep(0.05)
+    assert s["tick"] == 2 and s["done"] == 2 and s["error"] is None
     ev = {"id": "e1", "type": "piracy", "name": "Pirates", "start": 2, "targets": {"systems": [sid]}}
     assert client.post("/api/events", json=ev).status_code == 200
     assert client.post("/api/events", json=ev).status_code == 409
